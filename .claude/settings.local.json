@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet new:*)",
+      "Bash(dotnet sln:*)",
+      "Bash(dotnet add:*)",
+      "Bash(npm create:*)",
+      "Bash(npm install:*)",
+      "Bash(dotnet build:*)",
+      "Bash(dotnet test:*)",
+      "Bash(npm run:*)",
+      "Bash(dotnet run:*)",
+      "Bash(npx shadcn@latest init -y --force)",
+      "Bash(printf '\\\\n')",
+      "Bash(npx shadcn@latest init)",
+      "Bash(printf '\\\\n\\\\n\\\\n\\\\n\\\\n\\\\n\\\\n\\\\n')",
+      "Bash(find /c/Repos/atl -name \"appsettings*.json\" -type f 2>/dev/null | head -5)",
+      "Bash(grep -r \"tenant\" /c/Repos/atl/src --include=\"*.cs\" --include=\"*.json\" -i 2>/dev/null | head -20)",
+      "Bash(dotnet package:*)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}
