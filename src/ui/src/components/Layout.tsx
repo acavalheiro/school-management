@@ -1,15 +1,19 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { Users, Building2, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, Building2, LogOut, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
+import { useTheme } from './theme-provider';
 import { Button } from '@/components/ui/button';
 
 const NAV_ITEMS = [
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['Admin', 'User', 'SuperAdmin'] },
   { to: '/students', label: 'Students', icon: Users, roles: ['Admin', 'User', 'SuperAdmin'] },
   { to: '/tenants', label: 'Tenants', icon: Building2, roles: ['SuperAdmin'] },
 ];
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const { theme, setTheme } = useTheme();
+  const isDark = theme === 'dark';
 
   const visibleItems = NAV_ITEMS.filter(
     (item) => user && item.roles.includes(user.role),
@@ -43,10 +47,19 @@ export default function Layout() {
           ))}
         </nav>
 
-        <div className="px-3 py-4 border-t">
-          <div className="px-3 py-1 mb-2 text-xs text-muted-foreground truncate">
+        <div className="px-3 py-4 border-t space-y-1">
+          <div className="px-3 py-1 text-xs text-muted-foreground truncate">
             {user?.email}
           </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-2"
+            onClick={() => setTheme(isDark ? 'light' : 'dark')}
+          >
+            {isDark ? <Sun size={16} /> : <Moon size={16} />}
+            {isDark ? 'Light mode' : 'Dark mode'}
+          </Button>
           <Button variant="ghost" size="sm" className="w-full justify-start gap-2" onClick={logout}>
             <LogOut size={16} />
             Sign out
