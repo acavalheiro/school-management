@@ -44,6 +44,10 @@ dotnet run --project src/Api
 
 Aspire env vars (`ASPIRE_ALLOW_UNSECURED_TRANSPORT`, OTLP endpoints, dashboard URLs) are pre-set in `src/AppHost/Properties/launchSettings.json`. In Development only, `Program.cs` applies migrations and runs `RoleSeeder` on startup.
 
+The API listens on `http://localhost:5254`. When scripting against it use `127.0.0.1` — `localhost` resolves to IPv6 first and the connection fails.
+
+**Postgres naming:** `AddDatabase("DefaultConnection", "school-management")` in `src/AppHost/Program.cs`. The first argument is the Aspire *resource* name and becomes the connection-string key, so it must stay `DefaultConnection` to match `appsettings.json`; the second is the actual database name. Changing the resource name would silently break connection-string resolution, and omitting the second argument names the database after the resource.
+
 ### Frontend (`src/ui`)
 
 ```bash
@@ -110,7 +114,7 @@ This app stores personal data about **minors** (names, dates of birth, addresses
 - JWTs cannot be revoked. Deleting or demoting a user leaves their token valid until expiry.
 - `/api/auth/register` returns raw Identity errors, which enumerates existing emails.
 - `RegisterCommandHandler` saves the `Tenant` before creating the user, with no transaction — a failed registration orphans a `Tenant` row, and the endpoint is anonymous.
-- `dotnet build` reports known vulnerabilities in transitive packages (`Microsoft.OpenApi`, `MessagePack` via AppHost, OpenTelemetry). Worth resolving before handling real student data.
+- There is **no way to add a second user to an existing tenant**. `/api/auth/register` always creates a new `Tenant` and makes the registrant its sole `Admin`, so `/api/users` never lists more than one user per tenant. Consequently the cross-tenant guard in `UpdateUserRoleAsync`/`DeleteUserAsync` (`user.TenantId != callerTenantId`) has never been exercised against a real second user. Whatever invite/staff-creation endpoint fills this gap must be built with that guard tested.
 
 ### Role assignment
 
@@ -170,6 +174,7 @@ Repository pattern (use `IAppDbContext`/EF Core directly), AutoMapper (mappings 
 - `ITenantService` is **not** stubbed to a fixed value. `ClaimsTestTenantService` reads the `tid` claim exactly as production does, and `TestAuthHandler` takes the tenant and role from the `X-Test-Tenant` / `X-Test-Role` headers (defaulting to `TestTenantId` / `Admin`). Use `factory.CreateClientFor(tenantId, role)` to act as a given tenant and `factory.SeedAsync(...)` to arrange data for other tenants with the filter bypassed.
 - `TenantIsolationTests` covers the cross-tenant read invariant. When changing the query filter or tenant resolution, confirm those tests **fail** if you deliberately break isolation — an isolation test that passes vacuously on an empty result set is worse than none.
 - `Program.cs` ends with `public partial class Program;` so the factory can reference it.
+- Some behavior is only reachable through the real JWT pipeline, which `TestAuthHandler` bypasses: security-stamp revocation, rate limiting, Identity lockout, and the registration transaction (EF InMemory has no transactions). These were verified manually against a running Aspire instance on 2026-07-22 — lockout after 5 attempts with an error identical to wrong-password, 429 after 10 auth requests/min, tokens rejected after a role change or delete, and a duplicate-email registration rolling back with no orphaned `Tenant` row. Automated coverage still does not exist; re-verify manually after touching any of them.
 - `ValidationPipelineTests` guards the DI wiring that makes validators run at all. Don't delete it — the rules it protects are security boundaries, and they failed open once already.
 - Test naming: `[Method]_[Scenario]_[ExpectedResult]`.
 

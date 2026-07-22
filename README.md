@@ -86,7 +86,7 @@ If you prefer to manage PostgreSQL yourself:
 
 ```bash
 # 1. Start PostgreSQL (e.g. via Docker)
-docker run -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=atl -p 5432:5432 -d postgres
+docker run -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=school-management -p 5432:5432 -d postgres
 
 # 2. Apply migrations
 dotnet ef database update -p src/Infrastructure -s src/Api
