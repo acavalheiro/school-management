@@ -1,3 +1,4 @@
+using Application.Common.Behaviors;
 using Application.Common.Mediator;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,7 +23,25 @@ public static class DependencyInjection
                 .Select(i => new { HandlerType = t, Interface = i }));
 
         foreach (var handler in handlerTypes)
-            services.AddScoped(handler.Interface, handler.HandlerType);
+        {
+            // The concrete handler is registered by its own type so the decorator
+            // can resolve it without recursing through IRequestHandler<,>.
+            services.AddScoped(handler.HandlerType);
+
+            var args = handler.Interface.GetGenericArguments();
+            var behaviorType = typeof(ValidationBehavior<,>).MakeGenericType(args[0], args[1]);
+            var setInner = behaviorType.GetMethod(nameof(ValidationBehavior<IRequest<object>, object>.SetInner))!;
+            var handlerType = handler.HandlerType;
+
+            // Resolving IRequestHandler<,> yields the validation decorator wrapping
+            // the real handler, so validators run before any handler executes.
+            services.AddScoped(handler.Interface, sp =>
+            {
+                var behavior = ActivatorUtilities.CreateInstance(sp, behaviorType);
+                setInner.Invoke(behavior, [sp.GetRequiredService(handlerType)]);
+                return behavior;
+            });
+        }
 
         // Register all validators from Application assembly
         services.AddValidatorsFromAssembly(assembly, lifetime: ServiceLifetime.Scoped);

@@ -12,6 +12,11 @@ public sealed class CreateStudentCommandHandler(IAppDbContext db, ITenantService
         CreateStudentCommand request,
         CancellationToken cancellationToken)
     {
+        // Without a tenant the record would be written but visible to nobody —
+        // orphaned personal data. Reject rather than create it.
+        if (tenantService.TenantId == Guid.Empty)
+            return Error.Validation("TenantId", "The request has no tenant context.");
+
         var result = Student.Create(
             request.FirstName,
             request.LastName,

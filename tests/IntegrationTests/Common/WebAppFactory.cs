@@ -3,10 +3,13 @@ using System.Text.Encodings.Web;
 using Application.Common;
 using Application.Common.Interfaces;
 using Infrastructure.Persistence;
+using Domain.Entities;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -16,6 +19,22 @@ namespace IntegrationTests.Common;
 public sealed class WebAppFactory : WebApplicationFactory<Program>
 {
     public static readonly Guid TestTenantId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+
+    // Must be computed once per factory: generating it inside the options lambda
+    // gives every scope its own database, so seeded data is invisible to requests.
+    private readonly string _databaseName = $"IntegrationTest_{Guid.NewGuid()}";
+
+    // Startup refuses to run without a valid signing key, and user-secrets are not
+    // loaded outside Development. Program validates during CreateBuilder, before any
+    // web-host configuration callback runs, so this has to arrive as an environment
+    // variable. The value is test-only and signs nothing real.
+    static WebAppFactory()
+    {
+        Environment.SetEnvironmentVariable(
+            "JwtSettings__Secret", "integration-tests-signing-key-not-used-in-any-real-environment");
+        Environment.SetEnvironmentVariable("JwtSettings__Issuer", "atl-api-tests");
+        Environment.SetEnvironmentVariable("JwtSettings__Audience", "atl-ui-tests");
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -38,16 +57,10 @@ public sealed class WebAppFactory : WebApplicationFactory<Program>
 
             // Use in-memory database for integration tests
             services.AddDbContext<AppDbContext>(options =>
-                options.UseInMemoryDatabase($"IntegrationTest_{Guid.NewGuid()}"));
+                options.UseInMemoryDatabase(_databaseName));
 
-            // Replace TenantService with a fixed test tenant
-            var tenantDescriptor = services.SingleOrDefault(
-                d => d.ServiceType == typeof(ITenantService));
-
-            if (tenantDescriptor is not null)
-                services.Remove(tenantDescriptor);
-
-            services.AddSingleton<ITenantService>(new TestTenantService(TestTenantId));
+            // ITenantService is deliberately NOT replaced: tests exercise the real
+            // claim-based resolution, driven per request by TestAuthHandler.
 
             // Override authentication to auto-authenticate all test requests
             services.AddAuthentication(TestAuthHandler.SchemeName)
@@ -57,11 +70,40 @@ public sealed class WebAppFactory : WebApplicationFactory<Program>
 
         builder.UseEnvironment("Testing");
     }
-}
 
-internal sealed class TestTenantService(Guid tenantId) : ITenantService
-{
-    public Guid TenantId => tenantId;
+    /// <summary>
+    /// Creates a client whose requests are authenticated as <paramref name="role"/>
+    /// within <paramref name="tenantId"/>.
+    /// </summary>
+    public HttpClient CreateClientFor(Guid tenantId, string role = AppRoles.Admin) =>
+        CreateClientWithTenantHeader(tenantId.ToString(), role);
+
+    /// <summary>
+    /// Creates an authenticated client whose token carries no `tid` claim — the
+    /// malformed-token case that must fail closed.
+    /// </summary>
+    public HttpClient CreateClientWithoutTenant(string role = AppRoles.Admin) =>
+        CreateClientWithTenantHeader(TestAuthHandler.NoTenant, role);
+
+    private HttpClient CreateClientWithTenantHeader(string tenantHeader, string role)
+    {
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Add(TestAuthHandler.TenantHeader, tenantHeader);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.RoleHeader, role);
+        return client;
+    }
+
+    /// <summary>
+    /// Writes directly to the database with the tenant filter bypassed, so tests can
+    /// arrange data belonging to tenants other than the caller's.
+    /// </summary>
+    public async Task SeedAsync(Func<AppDbContext, Task> seed)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await seed(db);
+        await db.SaveChangesAsync();
+    }
 }
 
 internal sealed class TestAuthHandler(
@@ -71,15 +113,31 @@ internal sealed class TestAuthHandler(
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     public const string SchemeName = "Test";
+    public const string TenantHeader = "X-Test-Tenant";
+    public const string RoleHeader = "X-Test-Role";
+    public const string NoTenant = "none";
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        var claims = new[]
+        var role = Request.Headers.TryGetValue(RoleHeader, out var roleHeader)
+            ? roleHeader.ToString()
+            : AppRoles.Admin;
+
+        var claims = new List<Claim>
         {
-            new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
-            new Claim(ClaimTypes.Email, "test@example.com"),
-            new Claim(ClaimTypes.Role, AppRoles.Admin)
+            new(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+            new(ClaimTypes.Email, "test@example.com"),
+            new(ClaimTypes.Role, role)
         };
+
+        var tenantHeaderValue = Request.Headers.TryGetValue(TenantHeader, out var tenantHeader)
+            ? tenantHeader.ToString()
+            : WebAppFactory.TestTenantId.ToString();
+
+        // NoTenant emits a token with no `tid` at all, so tests can assert that an
+        // unresolvable tenant fails closed rather than exposing every school.
+        if (tenantHeaderValue != NoTenant)
+            claims.Add(new Claim("tid", tenantHeaderValue));
 
         var identity = new ClaimsIdentity(claims, SchemeName);
         var principal = new ClaimsPrincipal(identity);

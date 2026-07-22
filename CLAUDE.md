@@ -44,6 +44,10 @@ dotnet run --project src/Api
 
 Aspire env vars (`ASPIRE_ALLOW_UNSECURED_TRANSPORT`, OTLP endpoints, dashboard URLs) are pre-set in `src/AppHost/Properties/launchSettings.json`. In Development only, `Program.cs` applies migrations and runs `RoleSeeder` on startup.
 
+The API listens on `http://localhost:5254`. When scripting against it use `127.0.0.1` — `localhost` resolves to IPv6 first and the connection fails.
+
+**Postgres naming:** `AddDatabase("DefaultConnection", "school-management")` in `src/AppHost/Program.cs`. The first argument is the Aspire *resource* name and becomes the connection-string key, so it must stay `DefaultConnection` to match `appsettings.json`; the second is the actual database name. Changing the resource name would silently break connection-string resolution, and omitting the second argument names the database after the resource.
+
 ### Frontend (`src/ui`)
 
 ```bash
@@ -71,7 +75,7 @@ Api (endpoints) → Application (commands/queries/handlers) → Domain
 
 `Application/Common/Mediator` is a hand-written ~20-line mediator, not MediatR. `Mediator.Send` resolves `IRequestHandler<TRequest, TResponse>` from the container by reflection and invokes `Handle`. `AddApplication()` scans the Application assembly and registers every closed `IRequestHandler<,>` implementation.
 
-**There is no pipeline/decorator support.** `Common/Behaviors/ValidationBehavior.cs` is written as a decorator with a `SetInner` method but is **never registered and never executes** — FluentValidation validators are registered in DI but nothing invokes them today. If you need validation to actually run, either wire the decorator into `AddApplication()` or validate explicitly in the handler; don't assume request validation is happening.
+`Common/Behaviors/ValidationBehavior.cs` is a decorator (not a true pipeline): `AddApplication()` registers each concrete handler by its own type, then registers `IRequestHandler<,>` as a factory that wraps it in `ValidationBehavior` via `SetInner`. Resolving a handler therefore always yields the validation decorator, so FluentValidation validators run before every handler. Only one decorator is supported — adding a second behavior means nesting it in that same factory.
 
 ### Result pattern
 
@@ -84,20 +88,20 @@ Shared database, shared schema, enforced by EF Core global query filters.
 - `Tenant` is a Domain entity (`Id`, `Name`, `CreatedAt`, `Rename()`). Registering a user creates a `Tenant` alongside the account.
 - `TenantId` lives on `ApplicationUser` and every tenant-scoped domain entity, and travels in the JWT as the `tid` claim.
 - `TenantService` (Infrastructure) reads `tid` off `IHttpContextAccessor`.
-- `IAppDbContext` is registered as a **scoped factory** that resolves `AppDbContext` and stamps `db.TenantId` from `ITenantService` before handing it out. Handlers that take `IAppDbContext` therefore always see a pre-filtered view; a handler taking `AppDbContext` directly does not.
-- The filter is `TenantId == Guid.Empty || e.TenantId == TenantId` — `Guid.Empty` **bypasses** it, which is how SuperAdmin, the seeder, and migrations see everything.
+- `IAppDbContext` is registered as a **scoped factory** that resolves `AppDbContext` and stamps both `db.TenantId` and `db.BypassTenantFilter` from `ITenantService` before handing it out. Handlers that take `IAppDbContext` therefore always see a correctly scoped view; a handler taking `AppDbContext` directly does not.
+- The filter is `BypassTenantFilter || e.TenantId == TenantId`. `BypassTenantFilter` is SuperAdmin-only and defaults to false, so migrations, the seeder, and anonymous requests stay scoped.
 - `Tenant` itself has no query filter; it is globally visible (SuperAdmin endpoints only).
 - Identity tables are not filtered at the DbContext level. `IdentityService` filters users explicitly, and `UpdateUserRoleAsync` / `DeleteUserAsync` verify the target user belongs to the caller's tenant.
 
 ### Roles
 
-`SuperAdmin` (tenant `Guid.Empty`, all data, manages tenant lifecycle), `Admin` (own tenant, manages students/users), `User` (own tenant, read). Constants in `Application.Common.AppRoles`; policies of the same names are added in `Program.cs`. Seeded on startup from `SuperAdminSettings` / `AdminSettings` in `appsettings.json`.
+`SuperAdmin` (no tenant, sees all data via `BypassTenantFilter`, manages tenant lifecycle), `Admin` (own tenant, manages students/users), `User` (own tenant, read). Constants in `Application.Common.AppRoles`; policies of the same names are added in `Program.cs`. Seeded on startup in Development from `SuperAdminSettings` / `AdminSettings`, whose passwords come from user-secrets or the environment.
 
 ### Adding a tenant-scoped entity
 
 1. Add `public Guid TenantId { get; private set; }` to the Domain entity and take it in the factory method.
 2. Map the column + index in an `IEntityTypeConfiguration`.
-3. Add the entity to the global query filter in `AppDbContext.OnModelCreating`.
+3. Add the entity to the global query filter in `AppDbContext.OnModelCreating`, using the same `BypassTenantFilter || e.TenantId == TenantId` shape — a filter that treats `Guid.Empty` as "see everything" is a data leak.
 4. In the handler, inject `ITenantService` and pass `tenantService.TenantId` to the factory.
 
 ## Security
@@ -106,16 +110,29 @@ This app stores personal data about **minors** (names, dates of birth, addresses
 
 ### Known gaps — do not assume these are handled
 
-- **Validation does not run** (see the mediator section). `UpdateUserRoleCommandValidator` is the only thing restricting role assignment to `Admin`/`User`, so today an Admin can assign themselves `SuperAdmin` via `PUT /api/users/{id}/role` and reach the SuperAdmin-only tenant endpoints. Wiring the validation decorator is a security fix, not cleanup.
-- `IdentityService.UpdateUserRoleAsync` removes existing roles before confirming the new one applied — a failed add leaves the user with no roles.
-- `appsettings.json` is committed with a placeholder JWT secret and default credentials. Never rely on config-file secrets in a deployed environment; the app should fail startup on a placeholder or sub-32-byte secret.
 - Login goes through `UserManager.CheckPasswordAsync`, not `SignInManager`, so **Identity lockout never triggers**. There is no rate limiting on `/api/auth/login`.
 - JWTs cannot be revoked. Deleting or demoting a user leaves their token valid until expiry.
 - `/api/auth/register` returns raw Identity errors, which enumerates existing emails.
+- `RegisterCommandHandler` saves the `Tenant` before creating the user, with no transaction — a failed registration orphans a `Tenant` row, and the endpoint is anonymous.
+- There is **no way to add a second user to an existing tenant**. `/api/auth/register` always creates a new `Tenant` and makes the registrant its sole `Admin`, so `/api/users` never lists more than one user per tenant. Consequently the cross-tenant guard in `UpdateUserRoleAsync`/`DeleteUserAsync` (`user.TenantId != callerTenantId`) has never been exercised against a real second user. Whatever invite/staff-creation endpoint fills this gap must be built with that guard tested.
+
+### Role assignment
+
+`AppRoles.Assignable` (`Admin`, `User`) is the whitelist for `/api/users/{id}/role`; `SuperAdmin` is deliberately excluded because it grants cross-tenant access. It is enforced twice on purpose — in `UpdateUserRoleCommandValidator` and again in `IdentityService.UpdateUserRoleAsync` — so the boundary survives a DI or pipeline regression. Keep both. `UpdateUserRoleAsync` also adds the new role before removing old ones, so a failed add cannot strip a user of every role.
+
+### Secrets
+
+`JwtSettings:Secret` and the seeded account passwords are **not** in `appsettings.json` — only non-secret values (emails, issuer, audience) are committed. Supply secrets via user-secrets locally (`dotnet user-secrets set "JwtSettings:Secret" "..." --project src/Api`) and via environment variables (`JwtSettings__Secret`) or a key vault when deployed.
+
+`JwtSettings.Validate()` runs in `Program.cs` and **fails startup** on a missing, placeholder, or sub-32-byte key — anyone holding the key can mint a token for any tenant and role. Never add a fallback default to make startup "just work"; that defeats the check. `RoleSeeder` skips any account whose password is unset and logs a warning instead of failing.
+
+Note that `Program` validates during `CreateBuilder`, before web-host configuration callbacks run, so tests must inject config as environment variables (see `WebAppFactory`'s static constructor), not `ConfigureAppConfiguration`.
 
 ### Tenant isolation
 
-- The filter is **fail-open**: an unresolvable `tid` claim yields `Guid.Empty`, which *disables* the filter rather than denying the request. Prefer an explicit bypass flag for SuperAdmin over the `Guid.Empty` sentinel, and never widen the set of code paths that run with `Guid.Empty`.
+- The filter is `BypassTenantFilter || s.TenantId == TenantId` and **fails closed**. `Guid.Empty` is "no tenant context" and matches no rows; it does *not* disable the filter. Cross-tenant reads require `ITenantService.CanBypassTenantFilter`, which is true only for SuperAdmin.
+- Keep those two concepts separate. Folding "no tenant" back into "see everything" — in the filter, in `TenantService`, or in a new entity's filter — reintroduces a total data leak on any request with a missing or malformed `tid`.
+- Commands that write tenant-scoped data must reject `Guid.Empty` rather than persisting an unreachable row (see `CreateStudentCommandHandler`). Orphaned personal data is invisible to the app but still in the database.
 - Never call `IgnoreQueryFilters()` outside a SuperAdmin-only handler.
 - Injecting `AppDbContext` directly instead of `IAppDbContext` silently skips the tenant stamp. Always take `IAppDbContext`.
 - Identity tables are unfiltered — any new user-facing query must filter on `TenantId` explicitly and verify the target user's tenant matches the caller's.
@@ -153,10 +170,13 @@ Repository pattern (use `IAppDbContext`/EF Core directly), AutoMapper (mappings 
 ## Testing
 
 - Unit tests cover Domain entities and Application handlers, using Moq and `tests/UnitTests/Common/MockDbSet.cs` to fake `DbSet`s.
-- Integration tests use `WebAppFactory` (`WebApplicationFactory<Program>`), which swaps PostgreSQL for EF Core InMemory, replaces `ITenantService` with a fixed `TestTenantId`, and installs `TestAuthHandler` so every request is auto-authenticated as an `Admin`. Note it removes `IDbContextOptionsConfiguration<AppDbContext>` registrations too — EF Core 10 accumulates them per `AddDbContext` call and both providers would otherwise apply.
+- Integration tests use `WebAppFactory` (`WebApplicationFactory<Program>`), which swaps PostgreSQL for EF Core InMemory and installs `TestAuthHandler` so every request is auto-authenticated. Note it removes `IDbContextOptionsConfiguration<AppDbContext>` registrations too — EF Core 10 accumulates them per `AddDbContext` call and both providers would otherwise apply. The in-memory database name is a factory field, not generated inside the options lambda; generating it there gives each scope its own database and silently hides seeded data.
+- `ITenantService` is **not** stubbed to a fixed value. `ClaimsTestTenantService` reads the `tid` claim exactly as production does, and `TestAuthHandler` takes the tenant and role from the `X-Test-Tenant` / `X-Test-Role` headers (defaulting to `TestTenantId` / `Admin`). Use `factory.CreateClientFor(tenantId, role)` to act as a given tenant and `factory.SeedAsync(...)` to arrange data for other tenants with the filter bypassed.
+- `TenantIsolationTests` covers the cross-tenant read invariant. When changing the query filter or tenant resolution, confirm those tests **fail** if you deliberately break isolation — an isolation test that passes vacuously on an empty result set is worse than none.
 - `Program.cs` ends with `public partial class Program;` so the factory can reference it.
+- Some behavior is only reachable through the real JWT pipeline, which `TestAuthHandler` bypasses: security-stamp revocation, rate limiting, Identity lockout, and the registration transaction (EF InMemory has no transactions). These were verified manually against a running Aspire instance on 2026-07-22 — lockout after 5 attempts with an error identical to wrong-password, 429 after 10 auth requests/min, tokens rejected after a role change or delete, and a duplicate-email registration rolling back with no orphaned `Tenant` row. Automated coverage still does not exist; re-verify manually after touching any of them.
+- `ValidationPipelineTests` guards the DI wiring that makes validators run at all. Don't delete it — the rules it protects are security boundaries, and they failed open once already.
 - Test naming: `[Method]_[Scenario]_[ExpectedResult]`.
-- **Gap:** the factory pins a single `TestTenantId` and auto-authenticates every request as `Admin`, so no existing test can catch a cross-tenant leak. Any change to the query filter, `TenantService`, or file access needs a test with two distinct tenants and real tokens.
 
 ## Git Workflow
 

@@ -11,7 +11,11 @@ internal sealed class TokenService(IOptions<JwtSettings> options)
 {
     private readonly JwtSettings _settings = options.Value;
 
-    public AuthTokenDto GenerateToken(Guid userId, string email, IEnumerable<string> roles, Guid tenantId)
+    /// <summary>The claim carrying the user's Identity security stamp.</summary>
+    public const string SecurityStampClaim = "sstamp";
+
+    public AuthTokenDto GenerateToken(
+        Guid userId, string email, IEnumerable<string> roles, Guid tenantId, string securityStamp)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.Secret));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -22,7 +26,8 @@ internal sealed class TokenService(IOptions<JwtSettings> options)
             new(JwtRegisteredClaimNames.Sub, userId.ToString()),
             new(JwtRegisteredClaimNames.Email, email),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new("tid", tenantId.ToString())
+            new("tid", tenantId.ToString()),
+            new(SecurityStampClaim, securityStamp)
         };
 
         claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));

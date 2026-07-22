@@ -4,7 +4,10 @@ var postgres = builder.AddPostgres("postgres")
     .WithDataVolume()       // persist data across Docker restarts
     .WithPgAdmin();         // pgAdmin UI at a random port
 
-var atlDb = postgres.AddDatabase("DefaultConnection");
+// First argument is the Aspire resource name — it becomes the connection string
+// key, so it must stay "DefaultConnection" to match appsettings.json. The second
+// is the actual PostgreSQL database name.
+var atlDb = postgres.AddDatabase("DefaultConnection", "school-management");
 
 builder.AddProject<Projects.Api>("api")
     .WithReference(atlDb)

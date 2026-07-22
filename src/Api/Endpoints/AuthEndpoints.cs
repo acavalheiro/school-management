@@ -1,5 +1,7 @@
+using Api;
 using Application.Auth.Commands;
 using Application.Common.Mediator;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Api.Endpoints;
 
@@ -7,7 +9,9 @@ public static class AuthEndpoints
 {
     public static void MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/auth").WithTags("Auth");
+        var group = app.MapGroup("/api/auth")
+            .WithTags("Auth")
+            .RequireRateLimiting(RateLimitPolicies.Auth);
 
         group.MapPost("/register", Register)
             .WithName("Register")

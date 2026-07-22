@@ -32,7 +32,23 @@ A multi-tenant web application for school management that serves as a communicat
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (for Aspire to run PostgreSQL)
 - [Node.js](https://nodejs.org/) (for the frontend)
 
-### 1. Run with .NET Aspire (recommended)
+### 1. Configure secrets (first time only)
+
+The JWT signing key and the seeded account passwords are **not** in source control. The API refuses to start without a valid signing key. Set them locally with user-secrets:
+
+```bash
+# A random 32+ byte signing key. Anyone holding it can mint a token for any
+# school and any role, so never commit it or share it between environments.
+dotnet user-secrets set "JwtSettings:Secret" "$(openssl rand -base64 48)" --project src/Api
+
+# Only needed if you want the default accounts seeded in development.
+dotnet user-secrets set "SuperAdminSettings:Password" "SuperAdmin123!" --project src/Api
+dotnet user-secrets set "AdminSettings:Password" "Admin123!" --project src/Api
+```
+
+In deployed environments supply the same keys via environment variables (`JwtSettings__Secret`) or a key vault.
+
+### 2. Run with .NET Aspire (recommended)
 
 ```bash
 dotnet run --project src/AppHost
@@ -52,7 +68,7 @@ On first run, migrations are applied automatically and the following are seeded:
 - Roles: `SuperAdmin`, `Admin`, `User`
 - Default super admin and admin users from `appsettings.json`
 
-### 2. Run the frontend
+### 3. Run the frontend
 
 ```bash
 cd src/ui
@@ -70,7 +86,7 @@ If you prefer to manage PostgreSQL yourself:
 
 ```bash
 # 1. Start PostgreSQL (e.g. via Docker)
-docker run -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=atl -p 5432:5432 -d postgres
+docker run -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=school-management -p 5432:5432 -d postgres
 
 # 2. Apply migrations
 dotnet ef database update -p src/Infrastructure -s src/Api
@@ -83,10 +99,10 @@ dotnet run --project src/Api
 
 | Role | Email | Password |
 |---|---|---|
-| Super Admin | superadmin@atl.com | SuperAdmin123! |
-| Admin | admin@atl.com | Admin123! |
+| Super Admin | superadmin@atl.com | from `SuperAdminSettings:Password` |
+| Admin | admin@atl.com | from `AdminSettings:Password` |
 
-> Change these in `src/Api/appsettings.json` before deploying.
+Emails live in `appsettings.json`; passwords come from user-secrets or the environment. If no password is configured the account is simply not seeded, and a warning is logged. Seeding only runs in Development — never seed default accounts into a deployed environment.
 
 ## Multi-Tenancy
 
