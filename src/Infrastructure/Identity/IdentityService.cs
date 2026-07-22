@@ -79,14 +79,33 @@ internal sealed class IdentityService(
         if (user is null || user.TenantId != callerTenantId)
             return Error.NotFound(nameof(ApplicationUser), userId);
 
-        var currentRoles = await userManager.GetRolesAsync(user);
-        await userManager.RemoveFromRolesAsync(user, currentRoles);
+        // Defence in depth: never let a tenant-scoped caller assign SuperAdmin,
+        // regardless of what validation ran upstream.
+        if (!AppRoles.IsAssignable(role))
+            return Error.Validation(nameof(role), "Role is not assignable.");
 
+        var currentRoles = await userManager.GetRolesAsync(user);
+        if (currentRoles.Count == 1 && currentRoles[0] == role)
+            return Result.Success();
+
+        // Add before removing: a failed add must leave the user's existing roles
+        // intact rather than stripping them and locking the account out.
         var addResult = await userManager.AddToRoleAsync(user, role);
         if (!addResult.Succeeded)
         {
             var description = string.Join("; ", addResult.Errors.Select(e => e.Description));
             return new Error("Identity.UpdateRole", description);
+        }
+
+        var staleRoles = currentRoles.Where(r => r != role).ToList();
+        if (staleRoles.Count != 0)
+        {
+            var removeResult = await userManager.RemoveFromRolesAsync(user, staleRoles);
+            if (!removeResult.Succeeded)
+            {
+                var description = string.Join("; ", removeResult.Errors.Select(e => e.Description));
+                return new Error("Identity.UpdateRole", description);
+            }
         }
 
         return Result.Success();

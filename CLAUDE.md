@@ -71,7 +71,7 @@ Api (endpoints) → Application (commands/queries/handlers) → Domain
 
 `Application/Common/Mediator` is a hand-written ~20-line mediator, not MediatR. `Mediator.Send` resolves `IRequestHandler<TRequest, TResponse>` from the container by reflection and invokes `Handle`. `AddApplication()` scans the Application assembly and registers every closed `IRequestHandler<,>` implementation.
 
-**There is no pipeline/decorator support.** `Common/Behaviors/ValidationBehavior.cs` is written as a decorator with a `SetInner` method but is **never registered and never executes** — FluentValidation validators are registered in DI but nothing invokes them today. If you need validation to actually run, either wire the decorator into `AddApplication()` or validate explicitly in the handler; don't assume request validation is happening.
+`Common/Behaviors/ValidationBehavior.cs` is a decorator (not a true pipeline): `AddApplication()` registers each concrete handler by its own type, then registers `IRequestHandler<,>` as a factory that wraps it in `ValidationBehavior` via `SetInner`. Resolving a handler therefore always yields the validation decorator, so FluentValidation validators run before every handler. Only one decorator is supported — adding a second behavior means nesting it in that same factory.
 
 ### Result pattern
 
@@ -106,12 +106,16 @@ This app stores personal data about **minors** (names, dates of birth, addresses
 
 ### Known gaps — do not assume these are handled
 
-- **Validation does not run** (see the mediator section). `UpdateUserRoleCommandValidator` is the only thing restricting role assignment to `Admin`/`User`, so today an Admin can assign themselves `SuperAdmin` via `PUT /api/users/{id}/role` and reach the SuperAdmin-only tenant endpoints. Wiring the validation decorator is a security fix, not cleanup.
-- `IdentityService.UpdateUserRoleAsync` removes existing roles before confirming the new one applied — a failed add leaves the user with no roles.
 - `appsettings.json` is committed with a placeholder JWT secret and default credentials. Never rely on config-file secrets in a deployed environment; the app should fail startup on a placeholder or sub-32-byte secret.
 - Login goes through `UserManager.CheckPasswordAsync`, not `SignInManager`, so **Identity lockout never triggers**. There is no rate limiting on `/api/auth/login`.
 - JWTs cannot be revoked. Deleting or demoting a user leaves their token valid until expiry.
 - `/api/auth/register` returns raw Identity errors, which enumerates existing emails.
+- `RegisterCommandHandler` saves the `Tenant` before creating the user, with no transaction — a failed registration orphans a `Tenant` row, and the endpoint is anonymous.
+- `dotnet build` reports known vulnerabilities in transitive packages (`Microsoft.OpenApi`, `MessagePack` via AppHost, OpenTelemetry). Worth resolving before handling real student data.
+
+### Role assignment
+
+`AppRoles.Assignable` (`Admin`, `User`) is the whitelist for `/api/users/{id}/role`; `SuperAdmin` is deliberately excluded because it grants cross-tenant access. It is enforced twice on purpose — in `UpdateUserRoleCommandValidator` and again in `IdentityService.UpdateUserRoleAsync` — so the boundary survives a DI or pipeline regression. Keep both. `UpdateUserRoleAsync` also adds the new role before removing old ones, so a failed add cannot strip a user of every role.
 
 ### Tenant isolation
 
@@ -153,10 +157,12 @@ Repository pattern (use `IAppDbContext`/EF Core directly), AutoMapper (mappings 
 ## Testing
 
 - Unit tests cover Domain entities and Application handlers, using Moq and `tests/UnitTests/Common/MockDbSet.cs` to fake `DbSet`s.
-- Integration tests use `WebAppFactory` (`WebApplicationFactory<Program>`), which swaps PostgreSQL for EF Core InMemory, replaces `ITenantService` with a fixed `TestTenantId`, and installs `TestAuthHandler` so every request is auto-authenticated as an `Admin`. Note it removes `IDbContextOptionsConfiguration<AppDbContext>` registrations too — EF Core 10 accumulates them per `AddDbContext` call and both providers would otherwise apply.
+- Integration tests use `WebAppFactory` (`WebApplicationFactory<Program>`), which swaps PostgreSQL for EF Core InMemory and installs `TestAuthHandler` so every request is auto-authenticated. Note it removes `IDbContextOptionsConfiguration<AppDbContext>` registrations too — EF Core 10 accumulates them per `AddDbContext` call and both providers would otherwise apply. The in-memory database name is a factory field, not generated inside the options lambda; generating it there gives each scope its own database and silently hides seeded data.
+- `ITenantService` is **not** stubbed to a fixed value. `ClaimsTestTenantService` reads the `tid` claim exactly as production does, and `TestAuthHandler` takes the tenant and role from the `X-Test-Tenant` / `X-Test-Role` headers (defaulting to `TestTenantId` / `Admin`). Use `factory.CreateClientFor(tenantId, role)` to act as a given tenant and `factory.SeedAsync(...)` to arrange data for other tenants with the filter bypassed.
+- `TenantIsolationTests` covers the cross-tenant read invariant. When changing the query filter or tenant resolution, confirm those tests **fail** if you deliberately break isolation — an isolation test that passes vacuously on an empty result set is worse than none.
 - `Program.cs` ends with `public partial class Program;` so the factory can reference it.
+- `ValidationPipelineTests` guards the DI wiring that makes validators run at all. Don't delete it — the rules it protects are security boundaries, and they failed open once already.
 - Test naming: `[Method]_[Scenario]_[ExpectedResult]`.
-- **Gap:** the factory pins a single `TestTenantId` and auto-authenticates every request as `Admin`, so no existing test can catch a cross-tenant leak. Any change to the query filter, `TenantService`, or file access needs a test with two distinct tenants and real tokens.
 
 ## Git Workflow
 
