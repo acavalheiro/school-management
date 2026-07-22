@@ -84,20 +84,20 @@ Shared database, shared schema, enforced by EF Core global query filters.
 - `Tenant` is a Domain entity (`Id`, `Name`, `CreatedAt`, `Rename()`). Registering a user creates a `Tenant` alongside the account.
 - `TenantId` lives on `ApplicationUser` and every tenant-scoped domain entity, and travels in the JWT as the `tid` claim.
 - `TenantService` (Infrastructure) reads `tid` off `IHttpContextAccessor`.
-- `IAppDbContext` is registered as a **scoped factory** that resolves `AppDbContext` and stamps `db.TenantId` from `ITenantService` before handing it out. Handlers that take `IAppDbContext` therefore always see a pre-filtered view; a handler taking `AppDbContext` directly does not.
-- The filter is `TenantId == Guid.Empty || e.TenantId == TenantId` — `Guid.Empty` **bypasses** it, which is how SuperAdmin, the seeder, and migrations see everything.
+- `IAppDbContext` is registered as a **scoped factory** that resolves `AppDbContext` and stamps both `db.TenantId` and `db.BypassTenantFilter` from `ITenantService` before handing it out. Handlers that take `IAppDbContext` therefore always see a correctly scoped view; a handler taking `AppDbContext` directly does not.
+- The filter is `BypassTenantFilter || e.TenantId == TenantId`. `BypassTenantFilter` is SuperAdmin-only and defaults to false, so migrations, the seeder, and anonymous requests stay scoped.
 - `Tenant` itself has no query filter; it is globally visible (SuperAdmin endpoints only).
 - Identity tables are not filtered at the DbContext level. `IdentityService` filters users explicitly, and `UpdateUserRoleAsync` / `DeleteUserAsync` verify the target user belongs to the caller's tenant.
 
 ### Roles
 
-`SuperAdmin` (tenant `Guid.Empty`, all data, manages tenant lifecycle), `Admin` (own tenant, manages students/users), `User` (own tenant, read). Constants in `Application.Common.AppRoles`; policies of the same names are added in `Program.cs`. Seeded on startup from `SuperAdminSettings` / `AdminSettings` in `appsettings.json`.
+`SuperAdmin` (no tenant, sees all data via `BypassTenantFilter`, manages tenant lifecycle), `Admin` (own tenant, manages students/users), `User` (own tenant, read). Constants in `Application.Common.AppRoles`; policies of the same names are added in `Program.cs`. Seeded on startup in Development from `SuperAdminSettings` / `AdminSettings`, whose passwords come from user-secrets or the environment.
 
 ### Adding a tenant-scoped entity
 
 1. Add `public Guid TenantId { get; private set; }` to the Domain entity and take it in the factory method.
 2. Map the column + index in an `IEntityTypeConfiguration`.
-3. Add the entity to the global query filter in `AppDbContext.OnModelCreating`.
+3. Add the entity to the global query filter in `AppDbContext.OnModelCreating`, using the same `BypassTenantFilter || e.TenantId == TenantId` shape — a filter that treats `Guid.Empty` as "see everything" is a data leak.
 4. In the handler, inject `ITenantService` and pass `tenantService.TenantId` to the factory.
 
 ## Security
@@ -106,7 +106,6 @@ This app stores personal data about **minors** (names, dates of birth, addresses
 
 ### Known gaps — do not assume these are handled
 
-- `appsettings.json` is committed with a placeholder JWT secret and default credentials. Never rely on config-file secrets in a deployed environment; the app should fail startup on a placeholder or sub-32-byte secret.
 - Login goes through `UserManager.CheckPasswordAsync`, not `SignInManager`, so **Identity lockout never triggers**. There is no rate limiting on `/api/auth/login`.
 - JWTs cannot be revoked. Deleting or demoting a user leaves their token valid until expiry.
 - `/api/auth/register` returns raw Identity errors, which enumerates existing emails.
@@ -117,9 +116,19 @@ This app stores personal data about **minors** (names, dates of birth, addresses
 
 `AppRoles.Assignable` (`Admin`, `User`) is the whitelist for `/api/users/{id}/role`; `SuperAdmin` is deliberately excluded because it grants cross-tenant access. It is enforced twice on purpose — in `UpdateUserRoleCommandValidator` and again in `IdentityService.UpdateUserRoleAsync` — so the boundary survives a DI or pipeline regression. Keep both. `UpdateUserRoleAsync` also adds the new role before removing old ones, so a failed add cannot strip a user of every role.
 
+### Secrets
+
+`JwtSettings:Secret` and the seeded account passwords are **not** in `appsettings.json` — only non-secret values (emails, issuer, audience) are committed. Supply secrets via user-secrets locally (`dotnet user-secrets set "JwtSettings:Secret" "..." --project src/Api`) and via environment variables (`JwtSettings__Secret`) or a key vault when deployed.
+
+`JwtSettings.Validate()` runs in `Program.cs` and **fails startup** on a missing, placeholder, or sub-32-byte key — anyone holding the key can mint a token for any tenant and role. Never add a fallback default to make startup "just work"; that defeats the check. `RoleSeeder` skips any account whose password is unset and logs a warning instead of failing.
+
+Note that `Program` validates during `CreateBuilder`, before web-host configuration callbacks run, so tests must inject config as environment variables (see `WebAppFactory`'s static constructor), not `ConfigureAppConfiguration`.
+
 ### Tenant isolation
 
-- The filter is **fail-open**: an unresolvable `tid` claim yields `Guid.Empty`, which *disables* the filter rather than denying the request. Prefer an explicit bypass flag for SuperAdmin over the `Guid.Empty` sentinel, and never widen the set of code paths that run with `Guid.Empty`.
+- The filter is `BypassTenantFilter || s.TenantId == TenantId` and **fails closed**. `Guid.Empty` is "no tenant context" and matches no rows; it does *not* disable the filter. Cross-tenant reads require `ITenantService.CanBypassTenantFilter`, which is true only for SuperAdmin.
+- Keep those two concepts separate. Folding "no tenant" back into "see everything" — in the filter, in `TenantService`, or in a new entity's filter — reintroduces a total data leak on any request with a missing or malformed `tid`.
+- Commands that write tenant-scoped data must reject `Guid.Empty` rather than persisting an unreachable row (see `CreateStudentCommandHandler`). Orphaned personal data is invisible to the app but still in the database.
 - Never call `IgnoreQueryFilters()` outside a SuperAdmin-only handler.
 - Injecting `AppDbContext` directly instead of `IAppDbContext` silently skips the tenant stamp. Always take `IAppDbContext`.
 - Identity tables are unfiltered — any new user-facing query must filter on `TenantId` explicitly and verify the target user's tenant matches the caller's.

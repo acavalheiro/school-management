@@ -31,7 +31,9 @@ public static class DependencyInjection
         services.AddScoped<IAppDbContext>(sp =>
         {
             var db = sp.GetRequiredService<AppDbContext>();
-            db.TenantId = sp.GetRequiredService<ITenantService>().TenantId;
+            var tenantService = sp.GetRequiredService<ITenantService>();
+            db.TenantId = tenantService.TenantId;
+            db.BypassTenantFilter = tenantService.CanBypassTenantFilter;
             return db;
         });
 

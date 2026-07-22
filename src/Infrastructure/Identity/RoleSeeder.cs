@@ -37,6 +37,14 @@ public sealed class RoleSeeder(
         if (string.IsNullOrWhiteSpace(settings.Email))
             return;
 
+        if (string.IsNullOrWhiteSpace(settings.Password))
+        {
+            logger.LogWarning(
+                "Skipping default super admin: no password configured. Set SuperAdminSettings:Password " +
+                "via user-secrets or the environment — it must never be committed.");
+            return;
+        }
+
         var existing = await userManager.FindByEmailAsync(settings.Email);
         if (existing is not null)
             return;
@@ -67,6 +75,14 @@ public sealed class RoleSeeder(
         var settings = adminOptions.Value;
         if (string.IsNullOrWhiteSpace(settings.Email))
             return;
+
+        if (string.IsNullOrWhiteSpace(settings.Password))
+        {
+            logger.LogWarning(
+                "Skipping default admin: no password configured. Set AdminSettings:Password " +
+                "via user-secrets or the environment — it must never be committed.");
+            return;
+        }
 
         var existing = await userManager.FindByEmailAsync(settings.Email);
         if (existing is not null)

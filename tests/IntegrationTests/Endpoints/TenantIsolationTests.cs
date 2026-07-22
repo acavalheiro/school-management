@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using AwesomeAssertions;
 using Domain.Entities;
+using Application.Common;
 using IntegrationTests.Common;
 
 namespace IntegrationTests.Endpoints;
@@ -88,6 +89,42 @@ public sealed class TenantIsolationTests
         var studentsSeenByA = await schoolAClient.GetFromJsonAsync<List<StudentResponse>>("/api/students");
 
         studentsSeenByA.Should().NotContain(s => s.Email == "carla@school-b.test");
+    }
+
+    [Test]
+    public async Task ListStudents_WithNoTenantClaim_ReturnsNothingRatherThanEverything()
+    {
+        using var client = _factory.CreateClientWithoutTenant();
+
+        var students = await client.GetFromJsonAsync<List<StudentResponse>>("/api/students");
+
+        students.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task CreateStudent_WithNoTenantClaim_IsRejectedInsteadOfOrphaningTheRecord()
+    {
+        using var client = _factory.CreateClientWithoutTenant();
+
+        var response = await client.PostAsJsonAsync("/api/students", new
+        {
+            firstName = "Orphan",
+            lastName = "Record",
+            email = "orphan@nowhere.test",
+            dateOfBirth = "2015-01-01"
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Test]
+    public async Task ListStudents_AsSuperAdmin_SeesEveryTenant()
+    {
+        using var client = _factory.CreateClientWithoutTenant(AppRoles.SuperAdmin);
+
+        var students = await client.GetFromJsonAsync<List<StudentResponse>>("/api/students");
+
+        students.Should().HaveCount(2);
     }
 
     private sealed record StudentResponse(Guid Id, string Email);
