@@ -1,4 +1,4 @@
-<Project Sdk="Aspire.AppHost.Sdk/13.2.0">
+<Project Sdk="Aspire.AppHost.Sdk/13.4.6">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.2.0" />
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.4.6" />
     <!-- Pinned: the Aspire hosting stack pulls MessagePack 2.5.192, which is
          vulnerable to GHSA-hv8m-jj95-wg3x and GHSA-vh6j-jc39-fggf. 2.5.301 is the
          fix within the same major line. Remove once Aspire resolves it upstream. -->
