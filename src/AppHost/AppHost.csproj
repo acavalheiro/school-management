@@ -11,6 +11,10 @@
 
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.2.0" />
+    <!-- Pinned: the Aspire hosting stack pulls MessagePack 2.5.192, which is
+         vulnerable to GHSA-hv8m-jj95-wg3x and GHSA-vh6j-jc39-fggf. 2.5.301 is the
+         fix within the same major line. Remove once Aspire resolves it upstream. -->
+    <PackageReference Include="MessagePack" Version="2.5.301" />
   </ItemGroup>
 
   <ItemGroup>
