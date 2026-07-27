@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Building2, Plus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Building2, Plus, ChevronRight } from 'lucide-react';
 import { tenantsApi, type TenantDto } from '../api/tenantsApi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +15,7 @@ import {
 } from '@/components/ui/dialog';
 
 export default function TenantsPage() {
+  const navigate = useNavigate();
   const [tenants, setTenants] = useState<TenantDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +87,7 @@ export default function TenantsPage() {
       ) : tenants.length === 0 ? (
         <EmptyState onNew={() => setDialogOpen(true)} />
       ) : (
-        <TenantsTable tenants={tenants} />
+        <TenantsTable tenants={tenants} onOpen={(id) => navigate(`/tenants/${id}`)} />
       )}
 
       {/* Create dialog */}
@@ -132,7 +134,13 @@ export default function TenantsPage() {
   );
 }
 
-function TenantsTable({ tenants }: { tenants: TenantDto[] }) {
+function TenantsTable({
+  tenants,
+  onOpen,
+}: {
+  tenants: TenantDto[];
+  onOpen: (id: string) => void;
+}) {
   return (
     <div className="rounded-lg border overflow-hidden">
       <table className="w-full text-sm">
@@ -141,14 +149,16 @@ function TenantsTable({ tenants }: { tenants: TenantDto[] }) {
             <th className="text-left px-4 py-3 font-medium">Name</th>
             <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">Tenant ID</th>
             <th className="text-left px-4 py-3 font-medium">Created</th>
+            <th className="px-4 py-3" aria-hidden />
           </tr>
         </thead>
         <tbody>
           {tenants.map((t, i) => (
             <tr
               key={t.id}
+              onClick={() => onOpen(t.id)}
               className={[
-                'border-b last:border-0 hover:bg-muted/40 transition-colors',
+                'border-b last:border-0 hover:bg-muted/40 transition-colors cursor-pointer',
                 i % 2 === 1 ? 'bg-muted/20' : '',
               ].join(' ')}
             >
@@ -171,6 +181,9 @@ function TenantsTable({ tenants }: { tenants: TenantDto[] }) {
                   month: 'short',
                   day: 'numeric',
                 })}
+              </td>
+              <td className="px-4 py-3 text-right text-muted-foreground">
+                <ChevronRight size={16} className="inline-block" />
               </td>
             </tr>
           ))}

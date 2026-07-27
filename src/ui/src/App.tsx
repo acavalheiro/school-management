@@ -6,6 +6,7 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import StudentsPage from './pages/StudentsPage';
 import TenantsPage from './pages/TenantsPage';
+import TenantDetailPage from './pages/TenantDetailPage';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -41,6 +42,7 @@ function AppRoutes() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/students" element={<StudentsPage />} />
         <Route path="/tenants" element={<RequireRole role="SuperAdmin"><TenantsPage /></RequireRole>} />
+        <Route path="/tenants/:id" element={<RequireRole role="SuperAdmin"><TenantDetailPage /></RequireRole>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

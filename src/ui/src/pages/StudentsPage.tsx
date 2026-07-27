@@ -1,10 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { UserPlus, GraduationCap } from 'lucide-react';
+import { UserPlus, GraduationCap, Calendar as CalendarIcon } from 'lucide-react';
 import { studentsApi, type StudentDto, type CreateStudentRequest } from '../api/studentsApi';
+import { tenantsApi, type TenantDto } from '../api/tenantsApi';
+import { useAuth } from '../auth/AuthContext';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Dialog,
   DialogContent,
@@ -58,14 +71,53 @@ const emptyForm: CreateStudentRequest = {
   dateOfBirth: '',
 };
 
+type TenantOption = { value: string; label: string };
+
+// The API expects a plain 'YYYY-MM-DD' date; convert to/from a Date using local
+// components so the calendar's selection is not shifted by the timezone.
+function toISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function parseISODate(s: string): Date | undefined {
+  return s ? new Date(`${s}T00:00:00`) : undefined;
+}
+
 export default function StudentsPage() {
+  const { user } = useAuth();
+  // Creating students is an Admin/SuperAdmin action server-side; mirror that in the UI.
+  const canManage = user?.role === 'Admin' || user?.role === 'SuperAdmin';
+  const isSuperAdmin = user?.role === 'SuperAdmin';
+
   const [students, setStudents] = useState<StudentDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const [dobOpen, setDobOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<CreateStudentRequest>(emptyForm);
+  // Popups must portal into the dialog: a modal dialog sets body pointer-events:none,
+  // so anything portalled to body renders but cannot be clicked.
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // A SuperAdmin has no tenant of their own, so they must pick the target tenant.
+  const [tenants, setTenants] = useState<TenantDto[]>([]);
+  const [selectedTenant, setSelectedTenant] = useState<TenantOption | null>(null);
+  // Stable references so Base UI can match the selected value against the item list.
+  const tenantOptions = useMemo<TenantOption[]>(
+    () => tenants.map((t) => ({ value: t.id, label: t.name })),
+    [tenants],
+  );
+
+  useEffect(() => {
+    if (isSuperAdmin && open && tenants.length === 0) {
+      tenantsApi.list().then(setTenants).catch(() => {});
+    }
+  }, [isSuperAdmin, open, tenants.length]);
 
   useEffect(() => {
     if (searchParams.get('action') === 'add') {
@@ -85,13 +137,18 @@ export default function StudentsPage() {
   function handleClose() {
     setOpen(false);
     setForm(emptyForm);
+    setSelectedTenant(null);
   }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     try {
-      await studentsApi.create(form);
+      // Only a SuperAdmin sends tenantId; an Admin's tenant comes from their token,
+      // and sending an empty string would fail Guid binding server-side.
+      await studentsApi.create(
+        isSuperAdmin ? { ...form, tenantId: selectedTenant?.value } : form,
+      );
       const updated = await studentsApi.list();
       setStudents(updated);
       handleClose();
@@ -112,10 +169,12 @@ export default function StudentsPage() {
               : `${students.length} student${students.length !== 1 ? 's' : ''} enrolled`}
           </p>
         </div>
-        <Button onClick={() => setOpen(true)} size="sm" className="gap-2">
-          <UserPlus size={15} />
-          Add Student
-        </Button>
+        {canManage && (
+          <Button onClick={() => setOpen(true)} size="sm" className="gap-2">
+            <UserPlus size={15} />
+            Add Student
+          </Button>
+        )}
       </div>
 
       {/* Table */}
@@ -150,14 +209,16 @@ export default function StudentsPage() {
                       <p className="text-xs text-muted-foreground mt-1">
                         Add your first student to get started.
                       </p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mt-4"
-                        onClick={() => setOpen(true)}
-                      >
-                        Add Student
-                      </Button>
+                      {canManage && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-4"
+                          onClick={() => setOpen(true)}
+                        >
+                          Add Student
+                        </Button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -193,11 +254,42 @@ export default function StudentsPage() {
 
       {/* Add Student Dialog */}
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent>
+        <DialogContent
+          onInteractOutside={(e) => {
+            // The tenant combobox and the date-picker calendar are portalled outside
+            // the dialog; interacting with them must not be treated as an outside-click
+            // that closes the dialog.
+            const target = e.detail.originalEvent.target as Element | null;
+            if (target?.closest('[data-slot="combobox-content"], [data-slot="popover-content"]'))
+              e.preventDefault();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Add Student</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreate} className="space-y-4 mt-2">
+            {isSuperAdmin && (
+              <div className="space-y-2">
+                <Label htmlFor="tenant">Tenant</Label>
+                <Combobox
+                  items={tenantOptions}
+                  value={selectedTenant}
+                  onValueChange={(item: TenantOption | null) => setSelectedTenant(item)}
+                >
+                  <ComboboxInput id="tenant" placeholder="Search tenants…" />
+                  <ComboboxContent container={portalContainer}>
+                    <ComboboxEmpty>No tenants found.</ComboboxEmpty>
+                    <ComboboxList>
+                      {(item: TenantOption) => (
+                        <ComboboxItem key={item.value} value={item}>
+                          {item.label}
+                        </ComboboxItem>
+                      )}
+                    </ComboboxList>
+                  </ComboboxContent>
+                </Combobox>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="firstName">First name</Label>
@@ -230,23 +322,61 @@ export default function StudentsPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="dob">Date of birth</Label>
-              <Input
-                id="dob"
-                type="date"
-                value={form.dateOfBirth}
-                onChange={(e) => setForm({ ...form, dateOfBirth: e.target.value })}
-                required
-              />
+              <Popover open={dobOpen} onOpenChange={setDobOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="dob"
+                    type="button"
+                    variant="outline"
+                    className={cn(
+                      'w-full justify-start text-left font-normal',
+                      !form.dateOfBirth && 'text-muted-foreground',
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 size-4" />
+                    {form.dateOfBirth
+                      ? parseISODate(form.dateOfBirth)!.toLocaleDateString(undefined, {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        })
+                      : 'Pick a date'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start" container={portalContainer}>
+                  <Calendar
+                    mode="single"
+                    selected={parseISODate(form.dateOfBirth)}
+                    onSelect={(d) => {
+                      if (d) {
+                        setForm({ ...form, dateOfBirth: toISODate(d) });
+                        setDobOpen(false);
+                      }
+                    }}
+                    captionLayout="dropdown"
+                    startMonth={new Date(1950, 0)}
+                    endMonth={new Date()}
+                    disabled={{ after: new Date() }}
+                    defaultMonth={parseISODate(form.dateOfBirth) ?? new Date()}
+                    autoFocus
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="flex justify-end gap-3 pt-2">
               <Button type="button" variant="outline" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={saving}>
+              <Button
+                type="submit"
+                disabled={saving || !form.dateOfBirth || (isSuperAdmin && !selectedTenant)}
+              >
                 {saving ? 'Saving…' : 'Add Student'}
               </Button>
             </div>
           </form>
+          {/* Portal target inside the dialog for the combobox/date-picker popups. */}
+          <div ref={setPortalContainer} />
         </DialogContent>
       </Dialog>
     </div>

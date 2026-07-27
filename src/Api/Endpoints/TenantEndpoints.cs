@@ -2,6 +2,8 @@ using Application.Common;
 using Application.Common.Mediator;
 using Application.Tenants.Commands;
 using Application.Tenants.Queries;
+using Application.Users.Commands;
+using Application.Users.Queries;
 
 namespace Api.Endpoints;
 
@@ -32,6 +34,14 @@ public static class TenantEndpoints
         group.MapDelete("/{id:guid}", DeleteTenant)
             .WithName("DeleteTenant")
             .WithSummary("Delete a tenant and all its data");
+
+        group.MapGet("/{id:guid}/users", ListTenantUsers)
+            .WithName("ListTenantUsers")
+            .WithSummary("List the users of a tenant");
+
+        group.MapPost("/{id:guid}/users", CreateTenantUser)
+            .WithName("CreateTenantUser")
+            .WithSummary("Create an Admin or User in a tenant with a temporary password");
     }
 
     private static async Task<IResult> ListTenants(IMediator mediator, CancellationToken ct)
@@ -82,7 +92,32 @@ public static class TenantEndpoints
             ? Results.NoContent()
             : Results.NotFound(result.Error.Description);
     }
+
+    private static async Task<IResult> ListTenantUsers(Guid id, IMediator mediator, CancellationToken ct)
+    {
+        var result = await mediator.Send(new ListTenantUsersQuery(id), ct);
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : Results.Problem(result.Error.Description, statusCode: 500);
+    }
+
+    private static async Task<IResult> CreateTenantUser(
+        Guid id,
+        CreateTenantUserRequest request,
+        IMediator mediator,
+        CancellationToken ct)
+    {
+        var result = await mediator.Send(new CreateTenantUserCommand(id, request.Email, request.Role), ct);
+
+        if (result.IsSuccess)
+            return Results.Created($"/api/tenants/{id}/users/{result.Value!.UserId}", result.Value);
+
+        return result.Error.Code.Contains("NotFound")
+            ? Results.NotFound(result.Error.Description)
+            : Results.Problem(result.Error.Description, statusCode: 400);
+    }
 }
 
 public record CreateTenantRequest(string Name);
 public record UpdateTenantRequest(string Name);
+public record CreateTenantUserRequest(string Email, string Role);
