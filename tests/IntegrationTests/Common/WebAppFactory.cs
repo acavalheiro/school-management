@@ -6,9 +6,11 @@ using Infrastructure.Persistence;
 using Domain.Entities;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -55,9 +57,14 @@ public sealed class WebAppFactory : WebApplicationFactory<Program>
             foreach (var d in descriptorsToRemove)
                 services.Remove(d);
 
-            // Use in-memory database for integration tests
+            // Use in-memory database for integration tests. InMemory has no
+            // transactions and escalates that to an error by default; ignore the
+            // warning so handlers that open a transaction (registration, user
+            // provisioning) run — the transaction is simply a no-op here, so tests
+            // must not depend on rollback actually reverting a write.
             services.AddDbContext<AppDbContext>(options =>
-                options.UseInMemoryDatabase(_databaseName));
+                options.UseInMemoryDatabase(_databaseName)
+                    .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
 
             // ITenantService is deliberately NOT replaced: tests exercise the real
             // claim-based resolution, driven per request by TestAuthHandler.
@@ -103,6 +110,20 @@ public sealed class WebAppFactory : WebApplicationFactory<Program>
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await seed(db);
         await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Seeds Identity roles. RoleSeeder only runs in Development, so the Testing
+    /// environment has none — yet AddToRoleAsync (used when provisioning users) needs
+    /// the target role to exist. Call this before exercising user-creation endpoints.
+    /// </summary>
+    public async Task SeedRolesAsync(params string[] roles)
+    {
+        using var scope = Services.CreateScope();
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
+        foreach (var role in roles)
+            if (!await roleManager.RoleExistsAsync(role))
+                await roleManager.CreateAsync(new IdentityRole<Guid>(role));
     }
 }
 

@@ -1,3 +1,4 @@
+using Application.Common;
 using Application.Common.Mediator;
 using Application.Students.Commands;
 using Application.Students.Queries;
@@ -21,6 +22,7 @@ public static class StudentEndpoints
             .WithSummary("Get a student by ID");
 
         group.MapPost("/", CreateStudent)
+            .RequireAuthorization(AppPolicies.StudentWrite)
             .WithName("CreateStudent")
             .WithSummary("Create a new student");
     }
@@ -55,17 +57,27 @@ public static class StudentEndpoints
             request.FirstName,
             request.LastName,
             request.Email,
-            request.DateOfBirth);
+            request.DateOfBirth,
+            request.TenantId);
 
         var result = await mediator.Send(command, ct);
-        return result.IsSuccess
-            ? Results.CreatedAtRoute("GetStudent", new { id = result.Value }, result.Value)
+
+        if (result.IsSuccess)
+            return Results.CreatedAtRoute("GetStudent", new { id = result.Value }, result.Value);
+
+        // A SuperAdmin naming a tenant that does not exist is a not-found, distinct from
+        // a validation failure (e.g. a missing tenant context or invalid field).
+        return result.Error.Code.Contains("NotFound")
+            ? Results.NotFound(result.Error.Description)
             : Results.Problem(result.Error.Description, statusCode: 400);
     }
 }
 
+// TenantId is used only for a SuperAdmin caller, who must pick the target tenant;
+// it is ignored for an Admin, whose tenant comes from their claims.
 public record CreateStudentRequest(
     string FirstName,
     string LastName,
     string Email,
-    DateOnly DateOfBirth);
+    DateOnly DateOfBirth,
+    Guid? TenantId = null);

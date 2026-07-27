@@ -88,6 +88,50 @@ internal sealed class IdentityService(
     private static Error RegistrationFailed =>
         new("Auth.RegistrationFailed", "Registration could not be completed.");
 
+    public async Task<Result<CreatedUserDto>> CreateUserAsync(
+        string email,
+        Guid tenantId,
+        string role,
+        CancellationToken cancellationToken)
+    {
+        // Defence in depth: never mint a SuperAdmin (or any non-assignable role)
+        // through this path, regardless of what validation ran upstream.
+        if (!AppRoles.IsAssignable(role))
+            return Error.Validation(nameof(role), "Role is not assignable.");
+
+        // The caller is an authenticated SuperAdmin, not an anonymous registrant, so
+        // reporting a duplicate email is not an enumeration oracle here.
+        var existing = await userManager.FindByEmailAsync(email);
+        if (existing is not null)
+            return Error.Conflict(nameof(ApplicationUser));
+
+        var password = PasswordGenerator.Generate();
+
+        var user = new ApplicationUser
+        {
+            Id = Guid.NewGuid(),
+            UserName = email,
+            Email = email,
+            TenantId = tenantId
+        };
+
+        var createResult = await userManager.CreateAsync(user, password);
+        if (!createResult.Succeeded)
+        {
+            var description = string.Join("; ", createResult.Errors.Select(e => e.Description));
+            return new Error("Identity.CreateUser", description);
+        }
+
+        var roleResult = await userManager.AddToRoleAsync(user, role);
+        if (!roleResult.Succeeded)
+        {
+            var description = string.Join("; ", roleResult.Errors.Select(e => e.Description));
+            return new Error("Identity.CreateUser", description);
+        }
+
+        return new CreatedUserDto(user.Id, password);
+    }
+
     public async Task<Result<IReadOnlyList<UserDto>>> ListUsersAsync(Guid tenantId, CancellationToken cancellationToken)
     {
         var users = userManager.Users.Where(u => u.TenantId == tenantId).ToList();

@@ -49,6 +49,11 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy(AppRoles.SuperAdmin, policy => policy.RequireRole(AppRoles.SuperAdmin));
     options.AddPolicy(AppRoles.Admin, policy => policy.RequireRole(AppRoles.Admin));
+
+    // Creating students is a write reserved for Admins (within their tenant) and
+    // SuperAdmin (who supplies the target tenant explicitly). Reads stay open to
+    // any authenticated user, including the read-only User role.
+    options.AddPolicy(AppPolicies.StudentWrite, policy => policy.RequireRole(AppRoles.Admin, AppRoles.SuperAdmin));
 });
 
 // Rate limiting. Identity lockout protects a single account; this bounds

@@ -8,6 +8,19 @@ export interface TenantDto {
   createdAt: string;
 }
 
+export interface TenantUserDto {
+  id: string;
+  email: string;
+  role: string;
+}
+
+export interface CreatedUserResponse {
+  userId: string;
+  email: string;
+  role: string;
+  temporaryPassword: string;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = tokenStore.get();
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -23,9 +36,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const tenantsApi = {
   list: () => request<TenantDto[]>('/api/tenants'),
+  get: (id: string) => request<TenantDto>(`/api/tenants/${id}`),
   create: (name: string) =>
     request<{ tenantId: string }>('/api/tenants', {
       method: 'POST',
       body: JSON.stringify({ name }),
+    }),
+  listUsers: (tenantId: string) =>
+    request<TenantUserDto[]>(`/api/tenants/${tenantId}/users`),
+  createUser: (tenantId: string, body: { email: string; role: string }) =>
+    request<CreatedUserResponse>(`/api/tenants/${tenantId}/users`, {
+      method: 'POST',
+      body: JSON.stringify(body),
     }),
 };

@@ -18,6 +18,9 @@ export interface CreateStudentRequest {
   lastName: string;
   email: string;
   dateOfBirth: string;
+  // Only honoured for a SuperAdmin caller, who must pick the target tenant.
+  // Ignored for an Admin, whose tenant comes from their token.
+  tenantId?: string;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
