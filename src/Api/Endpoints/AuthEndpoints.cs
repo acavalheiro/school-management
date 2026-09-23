@@ -5,8 +5,10 @@ using Microsoft.AspNetCore.RateLimiting;
 
 namespace Api.Endpoints;
 
+/// <summary>Anonymous registration and login endpoints. Rate-limited via <see cref="RateLimitPolicies.Auth"/>.</summary>
 public static class AuthEndpoints
 {
+    /// <summary>Maps <c>POST /api/auth/register</c> and <c>POST /api/auth/login</c> under <c>/api/auth</c>.</summary>
     public static void MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/auth")
@@ -49,5 +51,8 @@ public static class AuthEndpoints
     }
 }
 
+/// <summary>Creates a new <c>Tenant</c> named <paramref name="TenantName"/> and registers the caller as its sole Admin.</summary>
 public record RegisterRequest(string Email, string Password, string ConfirmPassword, string TenantName);
+
+/// <summary>Credentials for <c>POST /api/auth/login</c>.</summary>
 public record LoginRequest(string Email, string Password);

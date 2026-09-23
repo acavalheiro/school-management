@@ -7,8 +7,10 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Endpoints;
 
+/// <summary>Student CRUD under <c>/api/students</c>. Requires authentication; results are always scoped to the caller's tenant.</summary>
 public static class StudentEndpoints
 {
+    /// <summary>Maps the student list/get/create endpoints under <c>/api/students</c>.</summary>
     public static void MapStudentEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/students").WithTags("Students").RequireAuthorization();
@@ -73,8 +75,10 @@ public static class StudentEndpoints
     }
 }
 
-// TenantId is used only for a SuperAdmin caller, who must pick the target tenant;
-// it is ignored for an Admin, whose tenant comes from their claims.
+/// <summary>
+/// <see cref="TenantId"/> is used only for a SuperAdmin caller, who must pick the target tenant;
+/// it is ignored for an Admin, whose tenant comes from their claims.
+/// </summary>
 public record CreateStudentRequest(
     string FirstName,
     string LastName,

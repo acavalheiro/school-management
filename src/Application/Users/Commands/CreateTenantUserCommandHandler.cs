@@ -16,6 +16,7 @@ public sealed class CreateTenantUserCommandHandler(IIdentityService identityServ
         // Tenant is globally visible (no query filter) and the caller is SuperAdmin,
         // so this sees the target tenant regardless of tenant context.
         var tenant = await db.Tenants
+            .AsNoTracking()
             .FirstOrDefaultAsync(t => t.Id == request.TenantId, cancellationToken);
 
         if (tenant is null)

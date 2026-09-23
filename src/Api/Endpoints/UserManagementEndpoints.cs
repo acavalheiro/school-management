@@ -5,8 +5,10 @@ using Application.Users.Queries;
 
 namespace Api.Endpoints;
 
+/// <summary>Manages users within the caller's own tenant under <c>/api/users</c>. Admin only.</summary>
 public static class UserManagementEndpoints
 {
+    /// <summary>Maps the list/update-role/delete endpoints under <c>/api/users</c>.</summary>
     public static void MapUserManagementEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app
@@ -56,4 +58,5 @@ public static class UserManagementEndpoints
     }
 }
 
+/// <summary>New role for the target user. Must be one of <c>AppRoles.Assignable</c> (never <c>SuperAdmin</c>).</summary>
 public record UpdateRoleRequest(string Role);

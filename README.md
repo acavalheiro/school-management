@@ -159,6 +159,8 @@ GET  /api/tenants         →  SuperAdmin only — lists all schools
 | POST | `/api/tenants` | Create a new tenant |
 | PUT | `/api/tenants/{id}` | Rename a tenant |
 | DELETE | `/api/tenants/{id}` | Delete tenant + all its data |
+| GET | `/api/tenants/{id}/users` | List the users of a tenant |
+| POST | `/api/tenants/{id}/users` | Create an Admin or User in a tenant with a temporary password |
 
 ## Project Structure
 

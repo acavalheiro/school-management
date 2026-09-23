@@ -7,8 +7,10 @@ using Application.Users.Queries;
 
 namespace Api.Endpoints;
 
+/// <summary>Tenant lifecycle and per-tenant user provisioning under <c>/api/tenants</c>. SuperAdmin only.</summary>
 public static class TenantEndpoints
 {
+    /// <summary>Maps tenant CRUD and the SuperAdmin user-provisioning endpoints under <c>/api/tenants</c>.</summary>
     public static void MapTenantEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/tenants")
@@ -118,6 +120,14 @@ public static class TenantEndpoints
     }
 }
 
+/// <summary>School name for a new tenant.</summary>
 public record CreateTenantRequest(string Name);
+
+/// <summary>New name for an existing tenant.</summary>
 public record UpdateTenantRequest(string Name);
+
+/// <summary>
+/// Provisions an Admin or User in the target tenant with a generated temporary password.
+/// <see cref="Role"/> must be one of <c>AppRoles.Assignable</c> (never <c>SuperAdmin</c>).
+/// </summary>
 public record CreateTenantUserRequest(string Email, string Role);

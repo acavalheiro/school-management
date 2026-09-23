@@ -61,6 +61,8 @@ There is no frontend test setup. API base URL comes from `VITE_API_URL`, default
 
 ## Architecture
 
+**Baseline: Clean Architecture** (4 projects — Domain, Application, Infrastructure, Api). Dependency direction: Domain → nothing; Application → Domain only; Infrastructure implements Application interfaces; Api depends on Application only (never on Infrastructure types directly — wiring in `Program.cs` is the sole exception).
+
 ```
 Api (endpoints) → Application (commands/queries/handlers) → Domain
                             ↑
@@ -108,13 +110,17 @@ Shared database, shared schema, enforced by EF Core global query filters.
 
 This app stores personal data about **minors** (names, dates of birth, addresses, photos, invoices). Treat tenant isolation and file access as correctness-critical, not best-effort. When a change touches auth, the tenant filter, or file serving, say so explicitly and add a test.
 
-### Known gaps — do not assume these are handled
+### Auth hardening — implemented, but not covered by automated tests
 
-- Login goes through `UserManager.CheckPasswordAsync`, not `SignInManager`, so **Identity lockout never triggers**. There is no rate limiting on `/api/auth/login`.
-- JWTs cannot be revoked. Deleting or demoting a user leaves their token valid until expiry.
-- `/api/auth/register` returns raw Identity errors, which enumerates existing emails.
-- `RegisterCommandHandler` saves the `Tenant` before creating the user, with no transaction — a failed registration orphans a `Tenant` row, and the endpoint is anonymous.
-- There is **no way to add a second user to an existing tenant**. `/api/auth/register` always creates a new `Tenant` and makes the registrant its sole `Admin`, so `/api/users` never lists more than one user per tenant. Consequently the cross-tenant guard in `UpdateUserRoleAsync`/`DeleteUserAsync` (`user.TenantId != callerTenantId`) has never been exercised against a real second user. Whatever invite/staff-creation endpoint fills this gap must be built with that guard tested.
+These used to be open gaps; commits `be3ad86` and `d30663d` closed them. Documented here (with pointers) instead of assumed, because none of it has automated coverage — see Testing below for why and the last manual-verification date.
+
+- **Lockout**: `IdentityService.LoginAsync` calls `SignInManager.CheckPasswordSignInAsync(user, password, lockoutOnFailure: true)`, not `UserManager.CheckPasswordAsync` — failed attempts increment the counter and lockout is enforced. A locked-out login returns the same generic "invalid credentials" error as a wrong password, so it isn't an enumeration oracle.
+- **Token revocation**: `SecurityStampValidator` compares the JWT's security-stamp claim against the stored one on every request. Deleting or demoting a user (or any `UpdateSecurityStampAsync` call) invalidates every token already issued to them — at the cost of one user lookup per authenticated request.
+- **Rate limiting**: `RateLimitPolicies.Auth` is applied to both `/api/auth/register` and `/api/auth/login` (wired in `Program.cs`, applied in `AuthEndpoints.cs`).
+- **Registration**: `RegisterCommandHandler` wraps `Tenant` creation and user creation in one transaction with rollback on failure, so a failed registration no longer orphans a `Tenant` row. `IdentityService.RegisterAsync` returns a generic `RegistrationFailed` error instead of raw Identity errors, so `/api/auth/register` is no longer an email-enumeration oracle.
+- **Adding a second tenant user**: `CreateTenantUserCommandHandler` (SuperAdmin-only, `POST /api/tenants/{id}/users`) fills the gap that used to leave the cross-tenant guard in `UpdateUserRoleAsync`/`DeleteUserAsync` unexercised. `TenantUserManagementTests` now exercises it against a real second user.
+
+Re-verify manually after touching auth, tokens, or registration — this is exactly the kind of code where a regression stays invisible to `dotnet test`.
 
 ### Role assignment
 
