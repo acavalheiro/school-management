@@ -75,14 +75,14 @@ type TenantOption = { value: string; label: string };
 
 // The API expects a plain 'YYYY-MM-DD' date; convert to/from a Date using local
 // components so the calendar's selection is not shifted by the timezone.
-function toISODate(d: Date): string {
+export function toISODate(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
 
-function parseISODate(s: string): Date | undefined {
+export function parseISODate(s: string): Date | undefined {
   return s ? new Date(`${s}T00:00:00`) : undefined;
 }
 

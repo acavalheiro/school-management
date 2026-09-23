@@ -118,6 +118,115 @@ public sealed class TenantUserManagementTests
         users.Should().ContainSingle(u => u.Id == created.UserId && u.Role == AppRoles.User);
     }
 
+    [Test]
+    public async Task ListUsers_AsAdmin_ReturnsOnlyUsersInCallersTenant()
+    {
+        using var superAdmin = _factory.CreateClientWithoutTenant(AppRoles.SuperAdmin);
+
+        var tenantBUser = await (await superAdmin.PostAsJsonAsync(
+                $"/api/tenants/{_tenantBId}/users",
+                new { email = "inb@school-b.test", role = AppRoles.User }))
+            .Content.ReadFromJsonAsync<CreatedUserResponse>();
+
+        Guid tenantCId = Guid.Empty;
+        await _factory.SeedAsync(db =>
+        {
+            var tenantC = Tenant.Create("School C").Value!;
+            tenantCId = tenantC.Id;
+            db.Tenants.Add(tenantC);
+            return Task.CompletedTask;
+        });
+        await superAdmin.PostAsJsonAsync(
+            $"/api/tenants/{tenantCId}/users",
+            new { email = "inc@school-c.test", role = AppRoles.User });
+
+        using var adminOfB = _factory.CreateClientFor(_tenantBId, AppRoles.Admin);
+        var users = await adminOfB.GetFromJsonAsync<List<UserResponse>>("/api/users");
+
+        users.Should().ContainSingle(u => u.Id == tenantBUser!.UserId);
+        users.Should().NotContain(u => u.Email == "inc@school-c.test");
+    }
+
+    [Test]
+    public async Task ListUsers_AsUser_IsForbidden()
+    {
+        using var user = _factory.CreateClientFor(_tenantBId, AppRoles.User);
+
+        var response = await user.GetAsync("/api/users");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Test]
+    public async Task UpdateUserRole_AsAdminOfSameTenant_ReturnsNoContentAndChangesTheRole()
+    {
+        using var superAdmin = _factory.CreateClientWithoutTenant(AppRoles.SuperAdmin);
+        var created = await (await superAdmin.PostAsJsonAsync(
+                $"/api/tenants/{_tenantBId}/users",
+                new { email = "promote@school-b.test", role = AppRoles.User }))
+            .Content.ReadFromJsonAsync<CreatedUserResponse>();
+
+        using var adminOfB = _factory.CreateClientFor(_tenantBId, AppRoles.Admin);
+        var response = await adminOfB.PutAsJsonAsync(
+            $"/api/users/{created!.UserId}/role", new { role = AppRoles.Admin });
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var users = await superAdmin.GetFromJsonAsync<List<UserResponse>>($"/api/tenants/{_tenantBId}/users");
+        users.Should().ContainSingle(u => u.Id == created.UserId && u.Role == AppRoles.Admin);
+    }
+
+    [Test]
+    public async Task UpdateUserRole_ToSuperAdmin_IsRejected()
+    {
+        using var superAdmin = _factory.CreateClientWithoutTenant(AppRoles.SuperAdmin);
+        var created = await (await superAdmin.PostAsJsonAsync(
+                $"/api/tenants/{_tenantBId}/users",
+                new { email = "escalate-attempt@school-b.test", role = AppRoles.User }))
+            .Content.ReadFromJsonAsync<CreatedUserResponse>();
+
+        using var adminOfB = _factory.CreateClientFor(_tenantBId, AppRoles.Admin);
+
+        // Through the real HTTP pipeline this is always caught by UpdateUserRoleCommandValidator
+        // before the request reaches IdentityService.UpdateUserRoleAsync's own whitelist check —
+        // the validator runs first in the pipeline, so this test cannot distinguish which of the
+        // two layers rejected it. It only proves the end-to-end behavior: escalation is blocked.
+        var response = await adminOfB.PutAsJsonAsync(
+            $"/api/users/{created!.UserId}/role", new { role = AppRoles.SuperAdmin });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Test]
+    public async Task DeleteUser_AsAdminOfSameTenant_ReturnsNoContentAndUserIsGone()
+    {
+        using var superAdmin = _factory.CreateClientWithoutTenant(AppRoles.SuperAdmin);
+        var created = await (await superAdmin.PostAsJsonAsync(
+                $"/api/tenants/{_tenantBId}/users",
+                new { email = "remove@school-b.test", role = AppRoles.User }))
+            .Content.ReadFromJsonAsync<CreatedUserResponse>();
+
+        using var adminOfB = _factory.CreateClientFor(_tenantBId, AppRoles.Admin);
+        var response = await adminOfB.DeleteAsync($"/api/users/{created!.UserId}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var users = await superAdmin.GetFromJsonAsync<List<UserResponse>>($"/api/tenants/{_tenantBId}/users");
+        users.Should().NotContain(u => u.Id == created.UserId);
+    }
+
+    [Test]
+    public async Task DeleteUser_UnknownUserId_ReturnsBadRequest()
+    {
+        using var adminOfB = _factory.CreateClientFor(_tenantBId, AppRoles.Admin);
+
+        // The handler surfaces "not found" as a generic Error, and the endpoint maps any
+        // failure to 400 (see UserManagementEndpoints.DeleteUser) — not 404.
+        var response = await adminOfB.DeleteAsync($"/api/users/{Guid.NewGuid()}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
     private sealed record CreatedUserResponse(Guid UserId, string Email, string Role, string TemporaryPassword);
     private sealed record UserResponse(Guid Id, string Email, string Role);
 }
