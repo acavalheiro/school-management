@@ -16,6 +16,12 @@ export const LANGUAGE_NAMES: Record<Language, string> = {
   'pt-PT': 'Português (Portugal)',
 };
 
+// Shorter labels for narrow places (the 14rem sidebar), where the full names get cut off.
+export const LANGUAGE_SHORT_NAMES: Record<Language, string> = {
+  'en-GB': 'English (UK)',
+  'pt-PT': 'Português',
+};
+
 export function isSupportedLanguage(value: unknown): value is Language {
   return typeof value === 'string' && (SUPPORTED_LANGUAGES as readonly string[]).includes(value);
 }

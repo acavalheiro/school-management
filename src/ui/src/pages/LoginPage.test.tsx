@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import LoginPage from './LoginPage';
 import { authApi } from '../api/authApi';
@@ -94,5 +94,12 @@ describe('LoginPage', () => {
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     expect(await screen.findByText(/too many attempts/i)).toBeInTheDocument();
+  });
+
+  it('keeps the full "Português (Portugal)" label on the login page', () => {
+    render(<LoginPage onLogin={vi.fn()} />);
+
+    const picker = screen.getByRole('combobox', { name: /language/i });
+    expect(within(picker).getByRole('option', { name: 'Português (Portugal)' })).toHaveValue('pt-PT');
   });
 });

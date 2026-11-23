@@ -31,7 +31,7 @@ Spec: `spec/SPEC-i18n.md` · Plan: `tasks/plan.md` · Branch: `feature/user-lang
 - [x] pt-PT copy reviewed by repo owner (Nome, Super Admin; rest accepted)
 - [x] Manual (2026-11-23): login, dashboard, students (form checks, date picker, offline error) in both languages. Found and fixed: numeric status crash, Sunday-first pt-PT weeks, today selectable as DOB
 - [ ] Manual: Tenants / TenantDetail pages in the browser (need a SuperAdmin session)
-- [ ] Decide: sidebar language picker truncates "Português (Portugal)"
+- [x] Sidebar language picker shows "Português" (compact labels); login page keeps "Português (Portugal)"
 - [x] Decided: API enums serialised by name (JsonStringEnumConverter)
 - [x] Decided: default language is pt-PT (new accounts + final fallback)
 

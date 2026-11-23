@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import Layout from './Layout';
@@ -81,5 +81,13 @@ describe('Layout', () => {
     expect(screen.getByRole('button', { name: /terminar sessão/i })).toBeInTheDocument();
     expect(document.documentElement.lang).toBe('pt-PT');
     expect(localStorage.getItem('atl_lang')).toBe('pt-PT');
+  });
+
+  it('uses the short "Português" label in the narrow sidebar', () => {
+    setup('Admin');
+
+    const picker = screen.getByRole('combobox', { name: /language/i });
+    expect(within(picker).getByRole('option', { name: 'Português' })).toHaveValue('pt-PT');
+    expect(within(picker).queryByRole('option', { name: 'Português (Portugal)' })).not.toBeInTheDocument();
   });
 });

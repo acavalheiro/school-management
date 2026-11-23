@@ -1,11 +1,18 @@
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Languages } from 'lucide-react';
-import { LANGUAGE_NAMES, SUPPORTED_LANGUAGES, isSupportedLanguage } from '@/i18n/languages';
+import {
+  LANGUAGE_NAMES,
+  LANGUAGE_SHORT_NAMES,
+  SUPPORTED_LANGUAGES,
+  isSupportedLanguage,
+} from '@/i18n/languages';
 import { useLanguage } from '@/i18n/useLanguage';
 
-export function LanguageSwitcher({ className }: { className?: string }) {
+/** `compact` uses the short language names, for narrow containers such as the sidebar. */
+export function LanguageSwitcher({ className, compact = false }: { className?: string; compact?: boolean }) {
   const { t } = useTranslation();
+  const names = compact ? LANGUAGE_SHORT_NAMES : LANGUAGE_NAMES;
   const { language, setLanguage } = useLanguage();
   const id = useId();
   const [saveFailed, setSaveFailed] = useState(false);
@@ -29,7 +36,7 @@ export function LanguageSwitcher({ className }: { className?: string }) {
         >
           {SUPPORTED_LANGUAGES.map((lang) => (
             <option key={lang} value={lang} lang={lang}>
-              {LANGUAGE_NAMES[lang]}
+              {names[lang]}
             </option>
           ))}
         </select>

@@ -62,7 +62,7 @@ export default function Layout() {
           <div className="px-3 py-1 text-xs text-muted-foreground truncate">
             {user?.email}
           </div>
-          <LanguageSwitcher className="px-3 py-1" />
+          <LanguageSwitcher className="px-3 py-1" compact />
           <Button
             variant="ghost"
             size="sm"
