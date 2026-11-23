@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
+import { ApiError } from '../api/http';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import TenantsPage from './TenantsPage';
 import { tenantsApi, type TenantDto } from '../api/tenantsApi';
+import i18n from '../i18n';
 
 vi.mock('../api/tenantsApi');
 
@@ -46,11 +48,11 @@ describe('TenantsPage', () => {
   });
 
   it("renders the error message when the list fails to load", async () => {
-    mockedList.mockRejectedValue(new Error('Network is unreachable'));
+    mockedList.mockRejectedValue(new TypeError('Failed to fetch'));
 
     renderPage();
 
-    expect(await screen.findByText('Network is unreachable')).toBeInTheDocument();
+    expect(await screen.findByText(/couldn't reach the server/i)).toBeInTheDocument();
   });
 
   it('creates a tenant with the trimmed name, closes the dialog, and reloads the list', async () => {
@@ -80,7 +82,7 @@ describe('TenantsPage', () => {
   it('shows an inline error and keeps the dialog open when creation fails', async () => {
     const user = userEvent.setup();
     mockedList.mockResolvedValue([tenant({ name: 'Existing Academy' })]);
-    mockedCreate.mockRejectedValue(new Error('Tenant name already taken'));
+    mockedCreate.mockRejectedValue(new ApiError(400, 'Name: Tenant name must not exceed 200 characters.'));
 
     renderPage();
     await screen.findByText('Existing Academy');
@@ -89,7 +91,8 @@ describe('TenantsPage', () => {
     await user.type(screen.getByLabelText(/school name/i), 'Duplicate Academy');
     await user.click(screen.getByRole('button', { name: /create tenant/i }));
 
-    expect(await screen.findByText('Tenant name already taken')).toBeInTheDocument();
+    expect(await screen.findByText(/some of the details are not valid/i)).toBeInTheDocument();
+    expect(screen.queryByText(/must not exceed/)).not.toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
@@ -102,5 +105,20 @@ describe('TenantsPage', () => {
     await user.click(await screen.findByText('Greenfield Academy'));
 
     expect(mockNavigate).toHaveBeenCalledWith(`/tenants/${t.id}`);
+  });
+
+  it('renders in pt-PT with Escola terminology and pt-PT dates', async () => {
+    await i18n.changeLanguage('pt-PT');
+    mockedList.mockResolvedValue([tenant({ name: 'Escola A', createdAt: '2024-03-05T10:00:00Z' })]);
+
+    renderPage();
+
+    expect(await screen.findByText('Escola A')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Escolas' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /nova escola/i })).toBeInTheDocument();
+    expect(screen.getByText('1 escola')).toBeInTheDocument();
+    expect(
+      screen.getByText(new Intl.DateTimeFormat('pt-PT', { dateStyle: 'medium' }).format(new Date('2024-03-05T10:00:00Z'))),
+    ).toBeInTheDocument();
   });
 });

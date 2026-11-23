@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import DashboardPage from './DashboardPage';
 import { studentsApi, type StudentDto } from '../api/studentsApi';
 import { useAuth } from '../auth/AuthContext';
+import i18n from '../i18n';
 
 vi.mock('../api/studentsApi');
 vi.mock('../auth/AuthContext');
@@ -112,5 +113,17 @@ describe('DashboardPage', () => {
     await user.click(await screen.findByRole('button', { name: /view all students/i }));
 
     expect(mockNavigate).toHaveBeenCalledWith('/students');
+  });
+
+  it('renders in pt-PT with the name interpolated and statuses translated', async () => {
+    await i18n.changeLanguage('pt-PT');
+    mockedList.mockResolvedValue([student({ firstName: 'Ana', lastName: 'Silva', status: 'Inactive' })]);
+    renderDashboard();
+
+    expect(await screen.findByText('Ana Silva')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^(Bom dia|Boa tarde|Boa noite), Admin\.owner$/);
+    expect(screen.getByText('1 aluno matriculado')).toBeInTheDocument();
+    expect(screen.getByText('Inativo')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /ver todos os alunos/i })).toBeInTheDocument();
   });
 });

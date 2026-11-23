@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { tokenStore } from '../api/authApi';
+import { tokenStore } from '../api/tokenStore';
 import { meApi } from '../api/meApi';
 import i18n from '../i18n';
 import { isSupportedLanguage } from '../i18n/languages';

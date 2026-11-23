@@ -3,6 +3,8 @@ import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from 'lucide-react
 import { DayButton, DayPicker, getDefaultClassNames } from 'react-day-picker';
 
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/i18n/useLanguage';
+import { DAY_PICKER_LOCALES } from '@/i18n/dayPickerLocales';
 import { Button, buttonVariants } from '@/components/ui/button';
 
 function Calendar({
@@ -18,6 +20,7 @@ function Calendar({
   buttonVariant?: React.ComponentProps<typeof Button>['variant'];
 }) {
   const defaultClassNames = getDefaultClassNames();
+  const { language } = useLanguage();
 
   return (
     <DayPicker
@@ -28,9 +31,10 @@ function Calendar({
         String.raw`rtl:**:[.rdp-button\_previous>svg]:rotate-180`,
         className,
       )}
+      locale={DAY_PICKER_LOCALES[language]}
       captionLayout={captionLayout}
       formatters={{
-        formatMonthDropdown: (date) => date.toLocaleString('default', { month: 'short' }),
+        formatMonthDropdown: (date) => date.toLocaleString(language, { month: 'short' }),
         ...formatters,
       }}
       classNames={{

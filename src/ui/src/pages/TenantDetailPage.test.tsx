@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '../api/http';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import TenantDetailPage from './TenantDetailPage';
 import { tenantsApi, type TenantDto, type TenantUserDto } from '../api/tenantsApi';
+import i18n from '../i18n';
 
 vi.mock('../api/tenantsApi');
 
@@ -57,11 +59,12 @@ describe('TenantDetailPage', () => {
 
   it('shows an error state when loading fails', async () => {
     mockedGet.mockResolvedValue(tenant());
-    mockedListUsers.mockRejectedValue(new Error('Users service unavailable'));
+    mockedListUsers.mockRejectedValue(new ApiError(500, 'Users service unavailable'));
 
     renderPage();
 
-    expect(await screen.findByText('Users service unavailable')).toBeInTheDocument();
+    expect(await screen.findByText(/the server had a problem/i)).toBeInTheDocument();
+    expect(screen.queryByText('Users service unavailable')).not.toBeInTheDocument();
   });
 
   it('creates a user and shows the one-time temporary password panel', async () => {
@@ -90,7 +93,7 @@ describe('TenantDetailPage', () => {
     const user = userEvent.setup();
     mockedGet.mockResolvedValue(tenant());
     mockedListUsers.mockResolvedValue([tenantUser()]);
-    mockedCreateUser.mockRejectedValue(new Error('Email already in use'));
+    mockedCreateUser.mockRejectedValue(new ApiError(409, 'ApplicationUser already exists.'));
 
     renderPage();
     await screen.findByText('staff@greenfield.edu');
@@ -99,7 +102,7 @@ describe('TenantDetailPage', () => {
     await user.type(screen.getByLabelText(/email/i), 'dup@greenfield.edu');
     await user.click(screen.getByRole('button', { name: /create user/i }));
 
-    expect(await screen.findByText('Email already in use')).toBeInTheDocument();
+    expect(await screen.findByText('That already exists.')).toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
@@ -170,5 +173,36 @@ describe('TenantDetailPage', () => {
 
     expect(screen.getByLabelText(/email/i)).toHaveValue('');
     expect(screen.queryByText('Temp!Pass123')).not.toBeInTheDocument();
+  });
+
+  it('renders in pt-PT, translating role names but not the stored values', async () => {
+    const user = userEvent.setup();
+    await i18n.changeLanguage('pt-PT');
+    mockedGet.mockResolvedValue(tenant());
+    mockedListUsers.mockResolvedValue([
+      tenantUser({ email: 'a@greenfield.edu', role: 'Admin' }),
+      tenantUser({ email: 'u@greenfield.edu', role: 'User' }),
+    ]);
+    mockedCreateUser.mockResolvedValue({
+      userId: crypto.randomUUID(),
+      email: 'novo@greenfield.edu',
+      role: 'User',
+      temporaryPassword: 'Temp!Pass123',
+    });
+
+    renderPage();
+
+    expect(await screen.findByText('Administrador')).toBeInTheDocument();
+    expect(screen.getByText('Utilizador')).toBeInTheDocument();
+    expect(screen.getByText('2 utilizadores')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /adicionar utilizador/i }));
+    await user.type(screen.getByLabelText(/email/i), 'novo@greenfield.edu');
+    await user.selectOptions(screen.getByLabelText('Função'), 'Utilizador');
+    await user.click(screen.getByRole('button', { name: /criar utilizador/i }));
+
+    expect(mockedCreateUser).toHaveBeenCalledWith(TENANT_ID, { email: 'novo@greenfield.edu', role: 'User' });
+    expect(await screen.findByText('Palavra-passe temporária')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /copiar palavra-passe temporária/i })).toBeInTheDocument();
   });
 });

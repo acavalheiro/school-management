@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import LoginPage from './LoginPage';
 import { authApi } from '../api/authApi';
 import i18n from '../i18n';
+import { ApiError } from '../api/http';
 
 vi.mock('../api/authApi');
 
@@ -81,5 +82,17 @@ describe('LoginPage', () => {
     await user.click(screen.getByRole('button', { name: 'Iniciar sessão' }));
 
     expect(await screen.findByText('Email ou palavra-passe inválidos.')).toBeInTheDocument();
+  });
+
+  it('says so when rate-limited instead of blaming the credentials', async () => {
+    const user = userEvent.setup();
+    mockedLogin.mockRejectedValue(new ApiError(429, ''));
+
+    render(<LoginPage onLogin={vi.fn()} />);
+    await user.type(screen.getByLabelText(/email/i), 'admin@school.test');
+    await user.type(screen.getByLabelText(/password/i), 'Password123!');
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
+
+    expect(await screen.findByText(/too many attempts/i)).toBeInTheDocument();
   });
 });

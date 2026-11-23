@@ -19,13 +19,14 @@ Spec: `spec/SPEC-i18n.md` · Plan: `tasks/plan.md` · Branch: `feature/user-lang
   - Verify: precedence tests; pt-BR browser shows pt-PT
 - [x] T6. Server sync via `meApi` (adopt server language on login/load; PUT only when signed in; non-blocking failure)
   - Verify: mocked-fetch tests for the three scenarios
-- [ ] Checkpoint B: frontend checks green; manual reload + fresh-browser sign-in applies saved language
+- [x] Checkpoint B: frontend checks green
+- [ ] Manual: reload + fresh-browser sign-in applies saved language
 
 ## Phase C: Translate the app
-- [ ] T7. `ApiError` + `errorMessage(err, t)` status mapping; replace raw `e.message` displays
-- [ ] T8. Dashboard + Students: translated, locale dates, date-fns calendar locale, create-student client validation
-- [ ] T9. Tenants + TenantDetail: translated (Escola), dates, dialogs
-- [ ] T10. `components/ui/*` labels + leftover-literal sweep + "no empty pt-PT value" test
+- [x] T7. `ApiError` + `errorMessage(err, t)` status mapping; replace raw `e.message` displays
+- [x] T8. Dashboard + Students: translated, locale dates, date-fns calendar locale, create-student client validation
+- [x] T9. Tenants + TenantDetail: translated (Escola), dates, dialogs
+- [x] T10. `components/ui/*` labels + leftover-literal sweep + "no empty pt-PT value" test
 - [ ] Checkpoint C: full manual walkthrough in both languages; **pt-PT copy reviewed by repo owner**
 
 ## Phase D: Wrap-up

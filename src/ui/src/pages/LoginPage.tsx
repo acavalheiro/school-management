@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from 'react';
 import { authApi } from '../api/authApi';
+import { ApiError } from '../api/http';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,8 +32,14 @@ export default function LoginPage({ onLogin }: Props) {
     try {
       const result = await authApi.login(email, password);
       onLogin(result.token);
-    } catch {
-      setError(t('auth.invalidCredentials'));
+    } catch (err) {
+      // Every other failure stays generic: distinguishing "no such account" or "locked out"
+      // would make login an enumeration oracle. Rate limiting reveals nothing about the account.
+      setError(
+        err instanceof ApiError && err.status === 429
+          ? t('errors.tooManyRequests')
+          : t('auth.invalidCredentials'),
+      );
     } finally {
       setLoading(false);
     }

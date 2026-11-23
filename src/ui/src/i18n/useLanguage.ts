@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { tokenStore } from '@/api/authApi';
+import { tokenStore } from '@/api/tokenStore';
 import { meApi } from '@/api/meApi';
 import { DEFAULT_LANGUAGE, isSupportedLanguage, type Language } from './languages';
 
