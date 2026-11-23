@@ -12,7 +12,7 @@ afterEach(() => {
 // process — window === globalThis in Vitest's jsdom pool, and window.localStorage
 // turned out to be the *same* broken, file-less stub (no setItem/getItem/clear at
 // all), not a working jsdom fallback. Replace it with a real in-memory Storage so
-// app code using the bare `localStorage` global (tokenStore in authApi.ts) works.
+// app code using the bare `localStorage` global (tokenStore in api/tokenStore.ts) works.
 class MemoryStorage implements Storage {
   private store = new Map<string, string>();
   get length() {

@@ -207,7 +207,7 @@ internal sealed class IdentityService(
 
     public async Task<Result<CurrentUserDto>> GetCurrentUserAsync(Guid userId, CancellationToken cancellationToken)
     {
-        var user = userId == Guid.Empty ? null : await userManager.FindByIdAsync(userId.ToString());
+        var user = await FindUserAsync(userId);
         if (user is null)
             return Error.NotFound(nameof(ApplicationUser), userId);
 
@@ -226,7 +226,7 @@ internal sealed class IdentityService(
         if (!SupportedLanguages.IsSupported(language))
             return Error.Validation(nameof(language), "Language is not supported.");
 
-        var user = userId == Guid.Empty ? null : await userManager.FindByIdAsync(userId.ToString());
+        var user = await FindUserAsync(userId);
         if (user is null)
             return Error.NotFound(nameof(ApplicationUser), userId);
 
@@ -245,6 +245,10 @@ internal sealed class IdentityService(
 
         return Result.Success();
     }
+
+    // Guid.Empty is "no user in the token"; it must never reach a lookup.
+    private async Task<ApplicationUser?> FindUserAsync(Guid userId) =>
+        userId == Guid.Empty ? null : await userManager.FindByIdAsync(userId.ToString());
 
     public async Task<Result> DeleteTenantUsersAsync(Guid tenantId, CancellationToken cancellationToken)
     {

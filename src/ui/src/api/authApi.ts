@@ -1,7 +1,5 @@
 import { apiRequest } from './http';
 
-export { tokenStore } from './tokenStore';
-
 export interface AuthTokenDto {
   token: string;
   expiresAt: string;

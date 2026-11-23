@@ -3,7 +3,8 @@ import { cn } from '@/lib/utils';
 
 type KnownStatus = 'active' | 'inactive' | 'graduated' | 'suspended';
 
-// Mirrors Domain.Enums.StudentStatus, which the API serialises as its numeric value.
+// Mirrors Domain.Enums.StudentStatus. The API now sends the name; the numeric values are still
+// accepted from responses produced before enums were serialised by name.
 const STATUS_BY_VALUE: Record<number, KnownStatus> = {
   1: 'active',
   2: 'inactive',

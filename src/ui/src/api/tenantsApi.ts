@@ -19,7 +19,6 @@ export interface CreatedUserResponse {
   temporaryPassword: string;
 }
 
-
 export const tenantsApi = {
   list: () => request<TenantDto[]>('/api/tenants'),
   get: (id: string) => request<TenantDto>(`/api/tenants/${id}`),

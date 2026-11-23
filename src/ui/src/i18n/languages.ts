@@ -45,7 +45,7 @@ function readStoredLanguage(): Language | null {
 
 /**
  * The language to start with before the server is consulted:
- * the locally cached choice, then the browser's preferences, then en-GB.
+ * the locally cached choice, then the browser's preferences, then DEFAULT_LANGUAGE.
  * The signed-in user's saved preference overrides this once it is fetched.
  */
 export function detectInitialLanguage(

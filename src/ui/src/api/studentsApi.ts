@@ -23,7 +23,6 @@ export interface CreateStudentRequest {
   tenantId?: string;
 }
 
-
 export const studentsApi = {
   list: () => request<StudentDto[]>('/api/students'),
   get: (id: string) => request<StudentDto>(`/api/students/${id}`),
