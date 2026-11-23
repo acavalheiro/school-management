@@ -163,6 +163,7 @@ Not yet implemented. When it is:
 - Primary constructors for DI; records for DTOs/commands; file-scoped namespaces; `CancellationToken` on every async method.
 - Auth endpoints are anonymous; everything else uses `.RequireAuthorization()`. `/api/users` requires `.RequireAuthorization(AppRoles.Admin)`; `/api/tenants` requires SuperAdmin. `/api/me` uses plain `.RequireAuthorization()` (any role).
 - Request DTO records are declared at the bottom of the endpoint file they belong to.
+- JSON uses `JsonStringEnumConverter` (configured in `Program.cs`): enums are written by name (`"Active"`), and numbers are still accepted on input. Frontend types for enum fields are the names.
 
 ### Never suggest
 
@@ -178,12 +179,12 @@ Repository pattern (use `IAppDbContext`/EF Core directly), AutoMapper (mappings 
 
 ### Translations (i18next)
 
-- Languages: `en-GB` and `pt-PT`, mirrored by `SupportedLanguages` on the API and `src/i18n/languages.ts`. Specs: `spec/SPEC-i18n.md`.
+- Languages: `en-GB` and `pt-PT`, mirrored by `SupportedLanguages` on the API and `src/i18n/languages.ts`. The default is `pt-PT` (`SupportedLanguages.Default` / `DEFAULT_LANGUAGE`): new accounts start in it and it is the final fallback. `en-GB` stays the catalogue source of truth, and tests reset to it so assertions read in English. Specs: `spec/SPEC-i18n.md`.
 - Every user-visible string goes through `t()` from `useTranslation()`. Add keys to `src/i18n/locales/en-GB.ts` first, then `pt-PT.ts`. `pt-PT` is typed against `en-GB` and `i18next.d.ts` types every key, so a missing pt-PT key or an unknown `t()` key fails `npm run build`.
 - pt-PT copy is European Portuguese (palavra-passe, utilizador, ecrã, Terminar sessão), never Brazilian. Fixed terms: Tenant → Escola, Student → Aluno, first name → Nome, last name → Apelido. The repo owner reviews pt-PT copy before merge.
 - Plurals use `_one` / `_other` keys with `{ count }`. pt-PT treats zero as plural ("0 alunos").
 - Dates: `formatDate` from `useLanguage()`, never `toLocaleDateString()` without a locale. Date-only API values (`YYYY-MM-DD`) go through `parseISODate` first to avoid a timezone shift. `Calendar` picks up the matching `react-day-picker` locale itself.
-- Language precedence: the account's saved preference (fetched from `GET /api/me` by `AuthContext` after sign-in or on load) > `localStorage` `atl_lang` > browser language > `en-GB`. `useLanguage().setLanguage` applies immediately and PUTs to `/api/me/language` only when signed in.
+- Language precedence: the account's saved preference (fetched from `GET /api/me` by `AuthContext` after sign-in or on load) > `localStorage` `atl_lang` > browser language > `pt-PT` (the default). `useLanguage().setLanguage` applies immediately and PUTs to `/api/me/language` only when signed in.
 - API values (roles, student statuses) stay in English on the wire; translate only their labels (`roles.*`, `students.status.*`) and show unknown values as-is. User-generated content (names, school names) is never translated.
 
 ## Testing

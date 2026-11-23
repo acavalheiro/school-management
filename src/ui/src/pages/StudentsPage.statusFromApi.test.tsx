@@ -10,15 +10,16 @@ vi.mock('../api/studentsApi');
 vi.mock('../api/tenantsApi');
 vi.mock('../auth/AuthContext');
 
-// Exactly what GET /api/students returned from a running API (StudentStatus serialised as a number).
-// Before the fix, any non-empty list crashed both pages with "status.toLowerCase is not a function".
+// The shape GET /api/students returns from a running API. StudentStatus used to arrive as a number,
+// which crashed both pages ("status.toLowerCase is not a function"); it now arrives by name, and
+// StatusBadge still copes with the numeric form (see StatusBadge.test.tsx).
 const fromApi: StudentDto = {
   id: '8a3ca62f-de17-4ea8-a489-027aeab9e8f2',
   firstName: 'Ana',
   lastName: 'Teste',
   email: 'ana.teste@example.test',
   dateOfBirth: '2016-11-10',
-  status: 1,
+  status: 'Active',
   createdAt: '2026-11-23T14:01:12.785054Z',
 };
 

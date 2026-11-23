@@ -20,6 +20,11 @@ namespace IntegrationTests.Endpoints;
 [TestFixture]
 public sealed class MeEndpointsRealJwtTests
 {
+    // Changes always move a user *away* from the default, so "others are untouched" can't pass
+    // vacuously just because the value written happens to equal the default.
+    private static readonly string NonDefault =
+        SupportedLanguages.All.First(l => l != SupportedLanguages.Default);
+
     private WebAppFactory _factory = null!;
     private readonly Guid _tenantA = Guid.NewGuid();
     private readonly Guid _tenantB = Guid.NewGuid();
@@ -80,7 +85,7 @@ public sealed class MeEndpointsRealJwtTests
     {
         using var anonymous = _factory.CreateClient();
 
-        var response = await anonymous.PutAsJsonAsync("/api/me/language", new { language = SupportedLanguages.PtPt });
+        var response = await anonymous.PutAsJsonAsync("/api/me/language", new { language = NonDefault });
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -106,15 +111,15 @@ public sealed class MeEndpointsRealJwtTests
         var userB = await _factory.SeedUserAsync("b@school-b.test", _tenantB);
         using var client = ClientWithToken(await LoginAsync("a@school-a.test"));
 
-        var put = await client.PutAsJsonAsync("/api/me/language", new { language = SupportedLanguages.PtPt });
+        var put = await client.PutAsJsonAsync("/api/me/language", new { language = NonDefault });
         var after = await client.GetAsync("/api/me");
 
         put.StatusCode.Should().Be(HttpStatusCode.NoContent);
         // The same token still works: a language change must not rotate the security stamp.
         after.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await after.Content.ReadFromJsonAsync<MeResponse>())!.PreferredLanguage.Should().Be(SupportedLanguages.PtPt);
-        (await _factory.FindUserAsync(userA)).PreferredLanguage.Should().Be(SupportedLanguages.PtPt);
-        (await _factory.FindUserAsync(userB)).PreferredLanguage.Should().Be(SupportedLanguages.EnGb);
+        (await after.Content.ReadFromJsonAsync<MeResponse>())!.PreferredLanguage.Should().Be(NonDefault);
+        (await _factory.FindUserAsync(userA)).PreferredLanguage.Should().Be(NonDefault);
+        (await _factory.FindUserAsync(userB)).PreferredLanguage.Should().Be(SupportedLanguages.Default);
     }
 
     [Test]
@@ -125,10 +130,10 @@ public sealed class MeEndpointsRealJwtTests
         var forged = MintToken(victim, "an-attacker-chosen-key-that-is-long-enough-for-hs256", stamp);
         using var client = ClientWithToken(forged);
 
-        var response = await client.PutAsJsonAsync("/api/me/language", new { language = SupportedLanguages.PtPt });
+        var response = await client.PutAsJsonAsync("/api/me/language", new { language = NonDefault });
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await _factory.FindUserAsync(victim)).PreferredLanguage.Should().Be(SupportedLanguages.EnGb);
+        (await _factory.FindUserAsync(victim)).PreferredLanguage.Should().Be(SupportedLanguages.Default);
     }
 
     [Test]
@@ -138,10 +143,10 @@ public sealed class MeEndpointsRealJwtTests
         var stale = MintToken(victim, WebAppFactory.JwtSecret, securityStamp: "not-the-current-stamp");
         using var client = ClientWithToken(stale);
 
-        var response = await client.PutAsJsonAsync("/api/me/language", new { language = SupportedLanguages.PtPt });
+        var response = await client.PutAsJsonAsync("/api/me/language", new { language = NonDefault });
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await _factory.FindUserAsync(victim)).PreferredLanguage.Should().Be(SupportedLanguages.EnGb);
+        (await _factory.FindUserAsync(victim)).PreferredLanguage.Should().Be(SupportedLanguages.Default);
     }
 
     private sealed record TokenResponse(string Token, DateTime ExpiresAt);

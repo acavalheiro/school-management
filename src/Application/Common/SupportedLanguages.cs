@@ -10,7 +10,8 @@ public static class SupportedLanguages
     public const string EnGb = "en-GB";
     public const string PtPt = "pt-PT";
 
-    public const string Default = EnGb;
+    // New accounts start in European Portuguese. Mirrored by DEFAULT_LANGUAGE in the frontend.
+    public const string Default = PtPt;
 
     public static readonly string[] All = [EnGb, PtPt];
 

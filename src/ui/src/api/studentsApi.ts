@@ -6,9 +6,9 @@ export interface StudentDto {
   lastName: string;
   email: string;
   dateOfBirth: string;
-  // Domain.Enums.StudentStatus, serialised by the API as its numeric value
-  // (1 Active, 2 Inactive, 3 Graduated, 4 Suspended). Strings are tolerated in case that changes.
-  status: number | string;
+  // Domain.Enums.StudentStatus by name ("Active", "Inactive", "Graduated", "Suspended").
+  // StatusBadge also accepts the numeric value the API sent before enums were serialised as names.
+  status: string | number;
   createdAt: string;
   updatedAt?: string;
 }

@@ -209,7 +209,8 @@ literals, truncated layouts (Portuguese strings are ~20–30% longer), and the d
 
 ## Success Criteria
 
-1. A new user's `PreferredLanguage` is `en-GB`; existing users are `en-GB` after migration.
+1. A new user's `PreferredLanguage` is `pt-PT` (the default since 2026-11-23); users that existed before the first
+   migration were backfilled to `en-GB`, and changing the default does not touch existing accounts.
 2. `PUT /api/me/language` with `pt-PT` → 204, and `GET /api/me` then returns `pt-PT`; with any other value → 400.
 3. `PUT /api/me/language` is available to `User`, `Admin`, and `SuperAdmin`; anonymous → 401.
 4. A user can only change their own language (integration test with two users proves it).
@@ -264,6 +265,11 @@ All open questions are resolved.
 - **Shared HTTP layer.** `src/api/http.ts` (`apiRequest`, `ApiError`) replaced three copies of `request()`;
   `src/i18n/errors.ts` maps status → message. Login keeps its generic invalid-credentials message for every
   failure except 429, which is reported as rate limiting (it reveals nothing about the account).
+- **Default language changed to pt-PT (repo owner, 2026-11-23).** `SupportedLanguages.Default` and the frontend
+  `DEFAULT_LANGUAGE` are `pt-PT`; migration `ChangeDefaultLanguageToPtPt` changes only the column default, so existing
+  accounts keep their saved language. Browser detection still wins over the default (an English browser gets en-GB).
+- **API enums serialised by name** (`JsonStringEnumConverter`), after browser testing found the UI crashing on the
+  numeric `StudentStatus`.
 - **pt-PT review outcome (repo owner, 2026-11-23):** first name → "Nome" (not "Nome próprio"); SuperAdmin → "Super Admin"
   (en-GB matched to "Super Admin"). All other drafted terms accepted as written: Apelido, Concluído, Função, Painel,
   Email, Matricular, Administrador, "ATL School" kept as the brand.

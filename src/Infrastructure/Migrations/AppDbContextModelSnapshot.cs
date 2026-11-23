@@ -140,7 +140,7 @@ namespace Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)")
-                        .HasDefaultValue("en-GB");
+                        .HasDefaultValue("pt-PT");
 
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");

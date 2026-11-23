@@ -32,8 +32,12 @@ describe('detectInitialLanguage', () => {
     expect(detectInitialLanguage(['fr-FR', 'pt-BR', 'en-GB'])).toBe('pt-PT');
   });
 
-  it('falls back to en-GB', () => {
-    expect(detectInitialLanguage(['fr-FR', 'de'])).toBe('en-GB');
-    expect(detectInitialLanguage([])).toBe('en-GB');
+  it('falls back to pt-PT, the default, when no browser language matches', () => {
+    expect(detectInitialLanguage(['fr-FR', 'de'])).toBe('pt-PT');
+    expect(detectInitialLanguage([])).toBe('pt-PT');
+  });
+
+  it('still honours an English browser over the default', () => {
+    expect(detectInitialLanguage(['en-US'])).toBe('en-GB');
   });
 });

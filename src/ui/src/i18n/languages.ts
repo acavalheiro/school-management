@@ -4,7 +4,9 @@ export const SUPPORTED_LANGUAGES = ['en-GB', 'pt-PT'] as const;
 
 export type Language = (typeof SUPPORTED_LANGUAGES)[number];
 
-export const DEFAULT_LANGUAGE: Language = 'en-GB';
+// Final fallback when neither the account, a cached choice nor the browser picks a language.
+// Mirrors SupportedLanguages.Default on the API.
+export const DEFAULT_LANGUAGE: Language = 'pt-PT';
 
 export const LANGUAGE_STORAGE_KEY = 'atl_lang';
 

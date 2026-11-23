@@ -13,6 +13,11 @@ namespace IntegrationTests.Endpoints;
 [TestFixture]
 public sealed class MeEndpointsTests
 {
+    // Changes always move a user *away* from the default, so "others are untouched" can't pass
+    // vacuously just because the value written happens to equal the default.
+    private static readonly string NonDefault =
+        SupportedLanguages.All.First(l => l != SupportedLanguages.Default);
+
     private WebAppFactory _factory = null!;
     private readonly Guid _tenantA = Guid.NewGuid();
     private readonly Guid _tenantB = Guid.NewGuid();
@@ -34,7 +39,7 @@ public sealed class MeEndpointsTests
         me!.Id.Should().Be(userId);
         me.Email.Should().Be("a@school-a.test");
         me.Role.Should().Be(AppRoles.User);
-        me.PreferredLanguage.Should().Be(SupportedLanguages.EnGb);
+        me.PreferredLanguage.Should().Be(SupportedLanguages.PtPt, "pt-PT is the default for new accounts");
     }
 
     [Test]
@@ -56,11 +61,11 @@ public sealed class MeEndpointsTests
         var userId = await _factory.SeedUserAsync($"{role}@school-a.test", _tenantA, role);
         using var client = _factory.CreateClientForUser(userId, _tenantA, role);
 
-        var put = await client.PutAsJsonAsync("/api/me/language", new { language = SupportedLanguages.PtPt });
+        var put = await client.PutAsJsonAsync("/api/me/language", new { language = NonDefault });
         var me = await client.GetFromJsonAsync<MeResponse>("/api/me");
 
         put.StatusCode.Should().Be(HttpStatusCode.NoContent);
-        me!.PreferredLanguage.Should().Be(SupportedLanguages.PtPt);
+        me!.PreferredLanguage.Should().Be(NonDefault);
     }
 
     [TestCase("pt-BR")]
@@ -75,7 +80,7 @@ public sealed class MeEndpointsTests
         var response = await client.PutAsJsonAsync("/api/me/language", new { language });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await _factory.FindUserAsync(userId)).PreferredLanguage.Should().Be(SupportedLanguages.EnGb);
+        (await _factory.FindUserAsync(userId)).PreferredLanguage.Should().Be(SupportedLanguages.Default);
     }
 
     [Test]
@@ -86,12 +91,12 @@ public sealed class MeEndpointsTests
         var sameTenantUser = await _factory.SeedUserAsync("a2@school-a.test", _tenantA);
         using var clientA = _factory.CreateClientForUser(userA, _tenantA);
 
-        var response = await clientA.PutAsJsonAsync("/api/me/language", new { language = SupportedLanguages.PtPt });
+        var response = await clientA.PutAsJsonAsync("/api/me/language", new { language = NonDefault });
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
-        (await _factory.FindUserAsync(userA)).PreferredLanguage.Should().Be(SupportedLanguages.PtPt);
-        (await _factory.FindUserAsync(userB)).PreferredLanguage.Should().Be(SupportedLanguages.EnGb);
-        (await _factory.FindUserAsync(sameTenantUser)).PreferredLanguage.Should().Be(SupportedLanguages.EnGb);
+        (await _factory.FindUserAsync(userA)).PreferredLanguage.Should().Be(NonDefault);
+        (await _factory.FindUserAsync(userB)).PreferredLanguage.Should().Be(SupportedLanguages.Default);
+        (await _factory.FindUserAsync(sameTenantUser)).PreferredLanguage.Should().Be(SupportedLanguages.Default);
     }
 
     [Test]
@@ -101,7 +106,7 @@ public sealed class MeEndpointsTests
         var stampBefore = (await _factory.FindUserAsync(userId)).SecurityStamp;
         using var client = _factory.CreateClientForUser(userId, _tenantA);
 
-        await client.PutAsJsonAsync("/api/me/language", new { language = SupportedLanguages.PtPt });
+        await client.PutAsJsonAsync("/api/me/language", new { language = NonDefault });
 
         // A rotated stamp would revoke every token the user holds: switching language must not sign them out.
         (await _factory.FindUserAsync(userId)).SecurityStamp.Should().Be(stampBefore);
@@ -112,7 +117,7 @@ public sealed class MeEndpointsTests
     {
         using var client = _factory.CreateClientFor(_tenantA);
 
-        var response = await client.PutAsJsonAsync("/api/me/language", new { language = SupportedLanguages.PtPt });
+        var response = await client.PutAsJsonAsync("/api/me/language", new { language = NonDefault });
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }

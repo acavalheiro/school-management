@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using AwesomeAssertions;
 using IntegrationTests.Common;
 
@@ -57,5 +58,25 @@ public sealed class StudentEndpointsTests
         var response = await _client.GetAsync($"/api/students/{Guid.NewGuid()}");
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Test]
+    public async Task ListStudents_SerialisesStatusAsItsName()
+    {
+        var created = await _client.PostAsJsonAsync("/api/students", new
+        {
+            firstName = "Ana",
+            lastName = "Silva",
+            email = "ana.silva@example.com",
+            dateOfBirth = "2015-03-01",
+        });
+        created.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        using var json = JsonDocument.Parse(await _client.GetStringAsync("/api/students"));
+        var status = json.RootElement[0].GetProperty("status");
+
+        // Enums go over the wire by name ("Active"), not by numeric value (1).
+        status.ValueKind.Should().Be(JsonValueKind.String);
+        status.GetString().Should().Be("Active");
     }
 }
