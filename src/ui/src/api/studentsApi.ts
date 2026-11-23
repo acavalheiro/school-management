@@ -1,6 +1,4 @@
-import { tokenStore } from './authApi';
-
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'https://localhost:7000';
+import { apiRequest as request } from './http';
 
 export interface StudentDto {
   id: string;
@@ -8,7 +6,9 @@ export interface StudentDto {
   lastName: string;
   email: string;
   dateOfBirth: string;
-  status: string;
+  // Domain.Enums.StudentStatus by name ("Active", "Inactive", "Graduated", "Suspended").
+  // StatusBadge also accepts the numeric value the API sent before enums were serialised as names.
+  status: string | number;
   createdAt: string;
   updatedAt?: string;
 }
@@ -23,18 +23,6 @@ export interface CreateStudentRequest {
   tenantId?: string;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = tokenStore.get();
-  const res = await fetch(`${BASE_URL}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    ...init,
-  });
-  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
-  return res.json() as Promise<T>;
-}
 
 export const studentsApi = {
   list: () => request<StudentDto[]>('/api/students'),

@@ -3,7 +3,7 @@ namespace Application.Common.Interfaces;
 /// <summary>
 /// Resolves the caller's tenant context from the current request. Implemented by
 /// reading the <c>tid</c> claim off <c>IHttpContextAccessor</c> in production;
-/// tests read the same claim via <c>ClaimsTestTenantService</c> rather than stubbing a fixed value.
+/// integration tests use the same implementation, driven by <c>TestAuthHandler</c>'s claims, rather than stubbing a fixed value.
 /// </summary>
 public interface ITenantService
 {

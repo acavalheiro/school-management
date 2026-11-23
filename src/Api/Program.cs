@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Api;
 using Api.Endpoints;
@@ -18,6 +19,11 @@ builder.AddServiceDefaults();
 
 // --- Services ---
 builder.Services.AddOpenApi();
+
+// Enums go over the wire by name ("Active"), not by numeric value. Numbers are still
+// accepted on input, so older clients keep working.
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
@@ -101,6 +107,7 @@ app.MapAuthEndpoints();
 app.MapStudentEndpoints();
 app.MapUserManagementEndpoints();
 app.MapTenantEndpoints();
+app.MapMeEndpoints();
 
 // --- Startup tasks ---
 if (app.Environment.IsDevelopment())

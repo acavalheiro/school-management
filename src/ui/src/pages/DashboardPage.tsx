@@ -5,12 +5,14 @@ import { useAuth } from '../auth/AuthContext';
 import { studentsApi, type StudentDto } from '../api/studentsApi';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { StatusBadge } from '@/components/StatusBadge';
+import { useTranslation } from 'react-i18next';
 
-function getGreeting() {
+function greetingKey() {
   const hour = new Date().getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 17) return 'Good afternoon';
-  return 'Good evening';
+  if (hour < 12) return 'dashboard.greeting.morning' as const;
+  if (hour < 17) return 'dashboard.greeting.afternoon' as const;
+  return 'dashboard.greeting.evening' as const;
 }
 
 function getDisplayName(email: string) {
@@ -18,20 +20,8 @@ function getDisplayName(email: string) {
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const isActive = status.toLowerCase() === 'active';
-  return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-        isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-      }`}
-    >
-      {status}
-    </span>
-  );
-}
-
 export default function DashboardPage() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [students, setStudents] = useState<StudentDto[]>([]);
@@ -55,17 +45,17 @@ export default function DashboardPage() {
       {/* Greeting */}
       <div>
         <h1 className="text-2xl font-semibold text-foreground">
-          {getGreeting()}, {displayName}
+          {t(greetingKey(), { name: displayName })}
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Here's what's happening at your school today.
+          {t('dashboard.subtitle')}
         </p>
       </div>
 
       {/* Quick Actions */}
       <div>
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-          Quick Actions
+          {t('dashboard.quickActions')}
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <button
@@ -76,8 +66,8 @@ export default function DashboardPage() {
               <UserPlus size={20} className="text-primary" />
             </div>
             <div>
-              <p className="font-medium text-foreground">Add Student</p>
-              <p className="text-sm text-muted-foreground mt-0.5">Enroll a new student</p>
+              <p className="font-medium text-foreground">{t('dashboard.addStudent')}</p>
+              <p className="text-sm text-muted-foreground mt-0.5">{t('dashboard.addStudentHint')}</p>
             </div>
           </button>
 
@@ -89,9 +79,9 @@ export default function DashboardPage() {
               <Users size={20} className="text-primary" />
             </div>
             <div>
-              <p className="font-medium text-foreground">View All Students</p>
+              <p className="font-medium text-foreground">{t('dashboard.viewAll')}</p>
               <p className="text-sm text-muted-foreground mt-0.5">
-                {loading ? '…' : `${students.length} student${students.length !== 1 ? 's' : ''} enrolled`}
+                {loading ? '…' : t('students.enrolled', { count: students.length })}
               </p>
             </div>
           </button>
@@ -102,14 +92,14 @@ export default function DashboardPage() {
       <div>
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Recently Added
+            {t('dashboard.recentlyAdded')}
           </p>
           {students.length > 0 && (
             <button
               onClick={() => navigate('/students')}
               className="text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
-              View all →
+              {t('dashboard.viewAllLink')}
             </button>
           )}
         </div>
@@ -132,14 +122,14 @@ export default function DashboardPage() {
             ) : recent.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <GraduationCap size={32} className="text-muted-foreground/40 mb-3" />
-                <p className="text-sm text-muted-foreground">No students yet.</p>
+                <p className="text-sm text-muted-foreground">{t('dashboard.empty')}</p>
                 <Button
                   variant="outline"
                   size="sm"
                   className="mt-4"
                   onClick={() => navigate('/students?action=add')}
                 >
-                  Add your first student
+                  {t('dashboard.addFirst')}
                 </Button>
               </div>
             ) : (
@@ -156,7 +146,7 @@ export default function DashboardPage() {
                       </p>
                       <p className="text-xs text-muted-foreground truncate">{s.email}</p>
                     </div>
-                    <StatusBadge status={s.status} />
+                    <StatusBadge status={s.status} className="px-2" />
                   </div>
                 ))}
               </div>

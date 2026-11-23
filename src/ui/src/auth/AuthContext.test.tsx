@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AuthProvider, useAuth } from './AuthContext';
+import { meApi } from '../api/meApi';
+
+// Signing in fetches the account's saved language; these tests are about token decoding only.
+vi.mock('../api/meApi');
 
 const ROLE_CLAIM = 'http://schemas.microsoft.com/ws/2008/06/identity/claims/role';
 
@@ -25,6 +29,9 @@ function Consumer() {
 describe('AuthContext', () => {
   beforeEach(() => {
     localStorage.clear();
+    vi.mocked(meApi.get).mockResolvedValue({
+      id: 'u1', email: 'admin@school.test', role: 'Admin', preferredLanguage: 'en-GB',
+    });
   });
 
   it('decodes email, role (namespaced claim), and tenantId from a well-formed token', () => {
