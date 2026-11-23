@@ -111,17 +111,14 @@ Shared database, shared schema, enforced by EF Core global query filters.
 
 This app stores personal data about **minors** (names, dates of birth, addresses, photos, invoices). Treat tenant isolation and file access as correctness-critical, not best-effort. When a change touches auth, the tenant filter, or file serving, say so explicitly and add a test.
 
-### Auth hardening — implemented, but not covered by automated tests
+### Auth invariants — no automated coverage
 
-These used to be open gaps; commits `be3ad86` and `d30663d` closed them. Documented here (with pointers) instead of assumed, because none of it has automated coverage — see Testing below for why and the last manual-verification date.
+None of these is covered by `dotnet test` (see Testing for why and the last manual-verification date). Re-verify manually after touching auth, tokens, or registration.
 
-- **Lockout**: `IdentityService.LoginAsync` calls `SignInManager.CheckPasswordSignInAsync(user, password, lockoutOnFailure: true)`, not `UserManager.CheckPasswordAsync` — failed attempts increment the counter and lockout is enforced. A locked-out login returns the same generic "invalid credentials" error as a wrong password, so it isn't an enumeration oracle.
-- **Token revocation**: `SecurityStampValidator` compares the JWT's security-stamp claim against the stored one on every request. Deleting or demoting a user (or any `UpdateSecurityStampAsync` call) invalidates every token already issued to them — at the cost of one user lookup per authenticated request.
-- **Rate limiting**: `RateLimitPolicies.Auth` is applied to both `/api/auth/register` and `/api/auth/login` (wired in `Program.cs`, applied in `AuthEndpoints.cs`).
-- **Registration**: `RegisterCommandHandler` wraps `Tenant` creation and user creation in one transaction with rollback on failure, so a failed registration no longer orphans a `Tenant` row. `IdentityService.RegisterAsync` returns a generic `RegistrationFailed` error instead of raw Identity errors, so `/api/auth/register` is no longer an email-enumeration oracle.
-- **Adding a second tenant user**: `CreateTenantUserCommandHandler` (SuperAdmin-only, `POST /api/tenants/{id}/users`) fills the gap that used to leave the cross-tenant guard in `UpdateUserRoleAsync`/`DeleteUserAsync` unexercised. `TenantUserManagementTests` now exercises it against a real second user.
-
-Re-verify manually after touching auth, tokens, or registration — this is exactly the kind of code where a regression stays invisible to `dotnet test`.
+- **Lockout**: `IdentityService.LoginAsync` uses `SignInManager.CheckPasswordSignInAsync(..., lockoutOnFailure: true)`, never `UserManager.CheckPasswordAsync`. A locked-out login returns the same generic "invalid credentials" error as a wrong password, so it is not an enumeration oracle.
+- **Token revocation**: `SecurityStampValidation.CreateEvents()` (`Infrastructure/Identity/SecurityStampValidator.cs`, wired as `JwtBearerOptions.Events` in `Program.cs`) compares the JWT's `sstamp` claim with the stored stamp in `OnTokenValidated` on every request. Deleting or demoting a user, or any `UpdateSecurityStampAsync` call, invalidates their issued tokens. This is custom JWT code, not ASP.NET Identity's cookie-based `SecurityStampValidator`.
+- **Rate limiting**: `RateLimitPolicies.Auth` covers both `/api/auth/register` and `/api/auth/login` (wired in `Program.cs`, applied in `AuthEndpoints.cs`).
+- **Registration**: `RegisterCommandHandler` creates the `Tenant` and the user in one transaction and rolls back on failure, so no orphaned `Tenant` rows. `IdentityService.RegisterAsync` returns a generic `RegistrationFailed` error, never raw Identity errors, so registration is not an email-enumeration oracle.
 
 ### Role assignment
 
@@ -148,14 +145,7 @@ Note that `Program` validates during `CreateBuilder`, before web-host configurat
 
 ### Handling student files (photos, invoices)
 
-Not yet implemented. When it is:
-
-- No public or guessable URLs, and no static-file serving of user content. Every download goes through an authorized endpoint that loads the owning record and re-checks its `TenantId` against the caller's.
-- Store blobs outside the database with private ACLs. Issue short-lived pre-signed URLs per request; never persistent ones.
-- Include the tenant in the object key (`{tenantId}/{studentId}/{fileId}`) and validate the key's tenant prefix before streaming, so an app-layer bug cannot cross tenants silently.
-- On upload: verify type by magic bytes (not `Content-Type` or extension), whitelist formats, cap size, generate a server-side filename, and **strip EXIF from images** — geolocation in photos of children is a real risk.
-- On download: `Content-Disposition: attachment` and `X-Content-Type-Options: nosniff`.
-- Encrypt at rest, audit-log every access (who, when, which student), and make deletion remove the blob, not just the row. Photos of minors need a recorded consent basis and a working right-to-erasure path.
+Not yet implemented. **Read `spec/SPEC-student-files.md` before writing any upload, download, or blob-storage code.** It covers the requirements: no public URLs, tenant-prefixed object keys, magic-byte checks, EXIF stripping, audit logging, and erasure. In short, no static-file serving of user content, ever; every download re-checks the owning record's `TenantId`.
 
 ## Conventions
 
