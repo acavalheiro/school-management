@@ -7,6 +7,9 @@ import {
   type TenantUserDto,
   type CreatedUserResponse,
 } from '../api/tenantsApi';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
+import { errorMessage } from '@/i18n/errors';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,31 +23,40 @@ import {
 } from '@/components/ui/dialog';
 
 const ROLES = ['Admin', 'User'] as const;
+const KNOWN_ROLES = ['SuperAdmin', 'Admin', 'User'] as const;
+
+/** Roles are API values; translate the known ones and show anything else as-is. */
+function roleLabel(role: string, t: TFunction): string {
+  return (KNOWN_ROLES as readonly string[]).includes(role)
+    ? t(`roles.${role as (typeof KNOWN_ROLES)[number]}`)
+    : role;
+}
 
 export default function TenantDetailPage() {
+  const { t } = useTranslation();
   const { id = '' } = useParams();
 
   const [tenant, setTenant] = useState<TenantDto | null>(null);
   const [users, setUsers] = useState<TenantUserDto[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<string>('Admin');
   const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<unknown>(null);
   const [created, setCreated] = useState<CreatedUserResponse | null>(null);
 
   function loadUsers() {
     setLoading(true);
     setError(null);
     Promise.all([tenantsApi.get(id), tenantsApi.listUsers(id)])
-      .then(([t, u]) => {
-        setTenant(t);
+      .then(([loadedTenant, u]) => {
+        setTenant(loadedTenant);
         setUsers(u);
       })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load tenant'))
+      .catch((e: unknown) => setError(e))
       .finally(() => setLoading(false));
   }
 
@@ -60,7 +72,7 @@ export default function TenantDetailPage() {
       const updated = await tenantsApi.listUsers(id);
       setUsers(updated);
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : 'Failed to create user');
+      setCreateError(err);
     } finally {
       setCreating(false);
     }
@@ -86,20 +98,20 @@ export default function TenantDetailPage() {
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft size={15} />
-          Back to tenants
+          {t('tenantDetail.back')}
         </Link>
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-foreground">
-              {tenant?.name ?? 'Tenant'}
+              {tenant?.name ?? t('tenantDetail.fallbackTitle')}
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Manage the admins and users of this school
+              {t('tenantDetail.subtitle')}
             </p>
           </div>
           <Button onClick={() => setDialogOpen(true)} className="gap-2">
             <Plus size={16} />
-            Add User
+            {t('tenantDetail.addUser')}
           </Button>
         </div>
       </div>
@@ -107,9 +119,9 @@ export default function TenantDetailPage() {
       {/* Content */}
       {loading ? (
         <UsersSkeleton />
-      ) : error ? (
+      ) : error != null ? (
         <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {error}
+          {errorMessage(error, t)}
         </div>
       ) : users.length === 0 ? (
         <EmptyState onNew={() => setDialogOpen(true)} />
@@ -125,20 +137,19 @@ export default function TenantDetailPage() {
           ) : (
             <>
               <DialogHeader>
-                <DialogTitle>Add user</DialogTitle>
+                <DialogTitle>{t('tenantDetail.dialog.title')}</DialogTitle>
                 <DialogDescription>
-                  Create an admin or user for this tenant. A temporary password is
-                  generated and shown once.
+                  {t('tenantDetail.dialog.description')}
                 </DialogDescription>
               </DialogHeader>
 
               <form onSubmit={handleCreate} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="user-email">Email</Label>
+                  <Label htmlFor="user-email">{t('tenantDetail.dialog.email')}</Label>
                   <Input
                     id="user-email"
                     type="email"
-                    placeholder="e.g. staff@greenfield.edu"
+                    placeholder={t('tenantDetail.dialog.emailPlaceholder')}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     autoFocus
@@ -147,7 +158,7 @@ export default function TenantDetailPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="user-role">Role</Label>
+                  <Label htmlFor="user-role">{t('tenantDetail.dialog.role')}</Label>
                   <select
                     id="user-role"
                     value={role}
@@ -156,22 +167,22 @@ export default function TenantDetailPage() {
                   >
                     {ROLES.map((r) => (
                       <option key={r} value={r} className="bg-background text-foreground">
-                        {r}
+                        {t(`roles.${r}`)}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                {createError && <p className="text-sm text-destructive">{createError}</p>}
+                {createError != null && <p className="text-sm text-destructive">{errorMessage(createError, t)}</p>}
 
                 <div className="flex justify-end gap-2 pt-1">
                   <DialogClose asChild>
                     <Button type="button" variant="outline" disabled={creating}>
-                      Cancel
+                      {t('common.cancel')}
                     </Button>
                   </DialogClose>
                   <Button type="submit" disabled={creating || !email.trim()}>
-                    {creating ? 'Creating…' : 'Create user'}
+                    {creating ? t('tenantDetail.dialog.creating') : t('tenantDetail.dialog.submit')}
                   </Button>
                 </div>
               </form>
@@ -190,6 +201,7 @@ function CreatedPanel({
   created: CreatedUserResponse;
   onDone: () => void;
 }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   async function copy() {
@@ -205,29 +217,34 @@ function CreatedPanel({
   return (
     <div className="space-y-4">
       <DialogHeader>
-        <DialogTitle>User created</DialogTitle>
+        <DialogTitle>{t('tenantDetail.created.title')}</DialogTitle>
         <DialogDescription>
-          Share these credentials with {created.email}. The temporary password is shown
-          only now and cannot be retrieved again.
+          {t('tenantDetail.created.description', { email: created.email })}
         </DialogDescription>
       </DialogHeader>
 
       <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
         <div>
-          <p className="text-xs font-medium text-muted-foreground">Email</p>
+          <p className="text-xs font-medium text-muted-foreground">{t('tenantDetail.created.email')}</p>
           <p className="text-sm text-foreground">{created.email}</p>
         </div>
         <div>
-          <p className="text-xs font-medium text-muted-foreground">Role</p>
-          <p className="text-sm text-foreground">{created.role}</p>
+          <p className="text-xs font-medium text-muted-foreground">{t('tenantDetail.created.role')}</p>
+          <p className="text-sm text-foreground">{roleLabel(created.role, t)}</p>
         </div>
         <div>
-          <p className="text-xs font-medium text-muted-foreground">Temporary password</p>
+          <p className="text-xs font-medium text-muted-foreground">{t('tenantDetail.created.temporaryPassword')}</p>
           <div className="mt-1 flex items-center gap-2">
             <code className="flex-1 rounded bg-background border px-2 py-1.5 font-mono text-sm text-foreground break-all">
               {created.temporaryPassword}
             </code>
-            <Button type="button" variant="outline" size="icon" onClick={copy}>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={copy}
+              aria-label={copied ? t('tenantDetail.created.copied') : t('tenantDetail.created.copy')}
+            >
               {copied ? <Check size={15} /> : <Copy size={15} />}
             </Button>
           </div>
@@ -236,7 +253,7 @@ function CreatedPanel({
 
       <div className="flex justify-end">
         <Button type="button" onClick={onDone}>
-          Done
+          {t('tenantDetail.created.done')}
         </Button>
       </div>
     </div>
@@ -244,13 +261,14 @@ function CreatedPanel({
 }
 
 function UsersTable({ users }: { users: TenantUserDto[] }) {
+  const { t } = useTranslation();
   return (
     <div className="rounded-lg border overflow-hidden">
       <table className="w-full text-sm">
         <thead>
           <tr className="bg-muted/60 text-muted-foreground border-b">
-            <th className="text-left px-4 py-3 font-medium">Email</th>
-            <th className="text-left px-4 py-3 font-medium">Role</th>
+            <th className="text-left px-4 py-3 font-medium">{t('tenantDetail.columns.email')}</th>
+            <th className="text-left px-4 py-3 font-medium">{t('tenantDetail.columns.role')}</th>
           </tr>
         </thead>
         <tbody>
@@ -270,31 +288,32 @@ function UsersTable({ users }: { users: TenantUserDto[] }) {
                   <span className="font-medium text-foreground">{u.email}</span>
                 </div>
               </td>
-              <td className="px-4 py-3 text-muted-foreground">{u.role}</td>
+              <td className="px-4 py-3 text-muted-foreground">{roleLabel(u.role, t)}</td>
             </tr>
           ))}
         </tbody>
       </table>
       <div className="px-4 py-2 border-t bg-muted/30 text-xs text-muted-foreground">
-        {users.length} user{users.length !== 1 ? 's' : ''}
+        {t('tenantDetail.count', { count: users.length })}
       </div>
     </div>
   );
 }
 
 function EmptyState({ onNew }: { onNew: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center">
       <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
         <Users size={22} className="text-muted-foreground" />
       </div>
-      <p className="font-medium text-foreground">No users yet</p>
+      <p className="font-medium text-foreground">{t('tenantDetail.empty')}</p>
       <p className="text-sm text-muted-foreground mt-1 mb-4">
-        Add the first admin for this school.
+        {t('tenantDetail.emptyHint')}
       </p>
       <Button size="sm" onClick={onNew} className="gap-2">
         <Plus size={14} />
-        Add User
+        {t('tenantDetail.addUser')}
       </Button>
     </div>
   );

@@ -1,4 +1,5 @@
 using Application.Auth.Queries;
+using Application.Me.Queries;
 using Application.Users.Queries;
 using Domain.Common;
 
@@ -37,6 +38,16 @@ public interface IIdentityService
 
     /// <summary>Deletes the target user after verifying <paramref name="callerTenantId"/> matches their tenant.</summary>
     Task<Result> DeleteUserAsync(Guid userId, Guid callerTenantId, CancellationToken cancellationToken);
+
+    /// <summary>Loads the caller's own account. <paramref name="userId"/> must come from the caller's token.</summary>
+    Task<Result<CurrentUserDto>> GetCurrentUserAsync(Guid userId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Sets the caller's UI language. <paramref name="userId"/> must come from the caller's token. Re-checks
+    /// <c>SupportedLanguages</c> independently of the validator, and deliberately leaves the security stamp
+    /// alone so a language change never revokes the caller's tokens.
+    /// </summary>
+    Task<Result> UpdatePreferredLanguageAsync(Guid userId, string language, CancellationToken cancellationToken);
 
     /// <summary>Deletes every Identity user belonging to a tenant, as part of tenant deletion.</summary>
     Task<Result> DeleteTenantUsersAsync(Guid tenantId, CancellationToken cancellationToken);

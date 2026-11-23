@@ -32,6 +32,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
 
+        modelBuilder.Entity<ApplicationUser>()
+            .Property(u => u.PreferredLanguage)
+            .HasMaxLength(10)
+            .IsRequired()
+            .HasDefaultValue(Application.Common.SupportedLanguages.Default);
+
         modelBuilder.Entity<Student>()
             .HasQueryFilter(s =>
                 BypassTenantFilter ||

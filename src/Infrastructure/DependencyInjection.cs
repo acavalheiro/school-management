@@ -57,6 +57,7 @@ public static class DependencyInjection
 
         services.AddHttpContextAccessor();
         services.AddScoped<ITenantService, TenantService>();
+        services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<TokenService>();
         services.AddScoped<IIdentityService, IdentityService>();
         services.AddScoped<RoleSeeder>();

@@ -5,6 +5,16 @@ import { studentsApi, type StudentDto, type CreateStudentRequest } from '../api/
 import { tenantsApi, type TenantDto } from '../api/tenantsApi';
 import { useAuth } from '../auth/AuthContext';
 import { cn } from '@/lib/utils';
+import { useTranslation } from 'react-i18next';
+import { errorMessage } from '@/i18n/errors';
+import { useLanguage } from '@/i18n/useLanguage';
+import { StatusBadge } from '@/components/StatusBadge';
+import {
+  STUDENT_LIMITS,
+  validateStudent,
+  type StudentErrors,
+  type StudentField,
+} from '@/lib/studentValidation';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import {
@@ -24,19 +34,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-
-function StatusBadge({ status }: { status: string }) {
-  const isActive = status.toLowerCase() === 'active';
-  return (
-    <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-        isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-      }`}
-    >
-      {status}
-    </span>
-  );
-}
 
 function TableSkeleton() {
   return (
@@ -86,7 +83,14 @@ export function parseISODate(s: string): Date | undefined {
   return s ? new Date(`${s}T00:00:00`) : undefined;
 }
 
+function yesterday(): Date {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+}
+
 export default function StudentsPage() {
+  const { t } = useTranslation();
+  const { formatDate } = useLanguage();
   const { user } = useAuth();
   // Creating students is an Admin/SuperAdmin action server-side; mirror that in the UI.
   const canManage = user?.role === 'Admin' || user?.role === 'SuperAdmin';
@@ -94,11 +98,13 @@ export default function StudentsPage() {
 
   const [students, setStudents] = useState<StudentDto[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [open, setOpen] = useState(false);
   const [dobOpen, setDobOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<CreateStudentRequest>(emptyForm);
+  const [fieldErrors, setFieldErrors] = useState<StudentErrors>({});
+  const [createError, setCreateError] = useState<unknown>(null);
   // Popups must portal into the dialog: a modal dialog sets body pointer-events:none,
   // so anything portalled to body renders but cannot be clicked.
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
@@ -130,18 +136,35 @@ export default function StudentsPage() {
     studentsApi
       .list()
       .then(setStudents)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(e))
       .finally(() => setLoading(false));
   }, []);
+
+  function updateField(field: StudentField, value: string) {
+    setForm((f) => ({ ...f, [field]: value }));
+    // Clear a field's error as soon as the user edits it; it is re-checked on submit.
+    setFieldErrors((errors) => {
+      const next = { ...errors };
+      delete next[field];
+      return next;
+    });
+  }
 
   function handleClose() {
     setOpen(false);
     setForm(emptyForm);
+    setFieldErrors({});
+    setCreateError(null);
     setSelectedTenant(null);
   }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
+    setCreateError(null);
+    const errors = validateStudent(form);
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
     setSaving(true);
     try {
       // Only a SuperAdmin sends tenantId; an Admin's tenant comes from their token,
@@ -152,6 +175,8 @@ export default function StudentsPage() {
       const updated = await studentsApi.list();
       setStudents(updated);
       handleClose();
+    } catch (err) {
+      setCreateError(err);
     } finally {
       setSaving(false);
     }
@@ -162,32 +187,35 @@ export default function StudentsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-foreground">Students</h1>
+          <h1 className="text-xl font-semibold text-foreground">{t('students.title')}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {loading
-              ? 'Loading…'
-              : `${students.length} student${students.length !== 1 ? 's' : ''} enrolled`}
+            {loading ? t('common.loading') : t('students.enrolled', { count: students.length })}
           </p>
         </div>
         {canManage && (
           <Button onClick={() => setOpen(true)} size="sm" className="gap-2">
             <UserPlus size={15} />
-            Add Student
+            {t('students.add')}
           </Button>
         )}
       </div>
 
       {/* Table */}
       <div className="rounded-xl border bg-card overflow-hidden">
-        {error ? (
+        {error != null ? (
           <div className="flex items-center justify-center py-12 text-sm text-destructive">
-            {error}
+            {errorMessage(error, t)}
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/40">
-                {['Name', 'Email', 'Status', 'Date of Birth'].map((h) => (
+                {[
+                  t('students.columns.name'),
+                  t('students.columns.email'),
+                  t('students.columns.status'),
+                  t('students.columns.dateOfBirth'),
+                ].map((h) => (
                   <th
                     key={h}
                     className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wide"
@@ -205,9 +233,9 @@ export default function StudentsPage() {
                   <td colSpan={4}>
                     <div className="flex flex-col items-center justify-center py-16 text-center">
                       <GraduationCap size={32} className="text-muted-foreground/40 mb-3" />
-                      <p className="text-sm font-medium text-foreground">No students yet</p>
+                      <p className="text-sm font-medium text-foreground">{t('students.empty')}</p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Add your first student to get started.
+                        {t('students.emptyHint')}
                       </p>
                       {canManage && (
                         <Button
@@ -216,7 +244,7 @@ export default function StudentsPage() {
                           className="mt-4"
                           onClick={() => setOpen(true)}
                         >
-                          Add Student
+                          {t('students.add')}
                         </Button>
                       )}
                     </div>
@@ -242,7 +270,7 @@ export default function StudentsPage() {
                       <StatusBadge status={s.status} />
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
-                      {new Date(s.dateOfBirth).toLocaleDateString()}
+                      {formatDate(parseISODate(s.dateOfBirth.slice(0, 10))!, { dateStyle: 'medium' })}
                     </td>
                   </tr>
                 ))
@@ -265,20 +293,20 @@ export default function StudentsPage() {
           }}
         >
           <DialogHeader>
-            <DialogTitle>Add Student</DialogTitle>
+            <DialogTitle>{t('students.add')}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleCreate} className="space-y-4 mt-2">
+          <form onSubmit={handleCreate} noValidate className="space-y-4 mt-2">
             {isSuperAdmin && (
               <div className="space-y-2">
-                <Label htmlFor="tenant">Tenant</Label>
+                <Label htmlFor="tenant">{t('students.form.tenant')}</Label>
                 <Combobox
                   items={tenantOptions}
                   value={selectedTenant}
                   onValueChange={(item: TenantOption | null) => setSelectedTenant(item)}
                 >
-                  <ComboboxInput id="tenant" placeholder="Search tenants…" />
+                  <ComboboxInput id="tenant" placeholder={t('students.form.searchTenants')} />
                   <ComboboxContent container={portalContainer}>
-                    <ComboboxEmpty>No tenants found.</ComboboxEmpty>
+                    <ComboboxEmpty>{t('students.form.noTenants')}</ComboboxEmpty>
                     <ComboboxList>
                       {(item: TenantOption) => (
                         <ComboboxItem key={item.value} value={item}>
@@ -292,42 +320,56 @@ export default function StudentsPage() {
             )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="firstName">First name</Label>
+                <Label htmlFor="firstName">{t('students.form.firstName')}</Label>
                 <Input
                   id="firstName"
                   value={form.firstName}
-                  onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                  onChange={(e) => updateField('firstName', e.target.value)}
+                  maxLength={STUDENT_LIMITS.name}
+                  aria-invalid={fieldErrors.firstName ? true : undefined}
+                  aria-describedby={fieldErrors.firstName ? 'firstName-error' : undefined}
                   required
                 />
+                <FieldError id="firstName-error" error={fieldErrors.firstName} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="lastName">Last name</Label>
+                <Label htmlFor="lastName">{t('students.form.lastName')}</Label>
                 <Input
                   id="lastName"
                   value={form.lastName}
-                  onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                  onChange={(e) => updateField('lastName', e.target.value)}
+                  maxLength={STUDENT_LIMITS.name}
+                  aria-invalid={fieldErrors.lastName ? true : undefined}
+                  aria-describedby={fieldErrors.lastName ? 'lastName-error' : undefined}
                   required
                 />
+                <FieldError id="lastName-error" error={fieldErrors.lastName} />
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{t('students.form.email')}</Label>
               <Input
                 id="email"
                 type="email"
                 value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                onChange={(e) => updateField('email', e.target.value)}
+                maxLength={STUDENT_LIMITS.email}
+                aria-invalid={fieldErrors.email ? true : undefined}
+                aria-describedby={fieldErrors.email ? 'email-error' : undefined}
                 required
               />
+              <FieldError id="email-error" error={fieldErrors.email} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="dob">Date of birth</Label>
+              <Label htmlFor="dob">{t('students.form.dateOfBirth')}</Label>
               <Popover open={dobOpen} onOpenChange={setDobOpen}>
                 <PopoverTrigger asChild>
                   <Button
                     id="dob"
                     type="button"
                     variant="outline"
+                    aria-invalid={fieldErrors.dateOfBirth ? true : undefined}
+                    aria-describedby={fieldErrors.dateOfBirth ? 'dob-error' : undefined}
                     className={cn(
                       'w-full justify-start text-left font-normal',
                       !form.dateOfBirth && 'text-muted-foreground',
@@ -335,12 +377,8 @@ export default function StudentsPage() {
                   >
                     <CalendarIcon className="mr-2 size-4" />
                     {form.dateOfBirth
-                      ? parseISODate(form.dateOfBirth)!.toLocaleDateString(undefined, {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
-                        })
-                      : 'Pick a date'}
+                      ? formatDate(parseISODate(form.dateOfBirth)!, { dateStyle: 'long' })
+                      : t('students.form.pickDate')}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start" container={portalContainer}>
@@ -349,29 +387,36 @@ export default function StudentsPage() {
                     selected={parseISODate(form.dateOfBirth)}
                     onSelect={(d) => {
                       if (d) {
-                        setForm({ ...form, dateOfBirth: toISODate(d) });
+                        updateField('dateOfBirth', toISODate(d));
                         setDobOpen(false);
                       }
                     }}
                     captionLayout="dropdown"
                     startMonth={new Date(1950, 0)}
                     endMonth={new Date()}
-                    disabled={{ after: new Date() }}
+                    // Strictly before today, matching the client and server validators.
+                    disabled={{ after: yesterday() }}
                     defaultMonth={parseISODate(form.dateOfBirth) ?? new Date()}
                     autoFocus
                   />
                 </PopoverContent>
               </Popover>
+              <FieldError id="dob-error" error={fieldErrors.dateOfBirth} />
             </div>
+            {createError != null && (
+              <p role="alert" className="text-sm text-destructive">
+                {errorMessage(createError, t)}
+              </p>
+            )}
             <div className="flex justify-end gap-3 pt-2">
               <Button type="button" variant="outline" onClick={handleClose}>
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button
                 type="submit"
                 disabled={saving || !form.dateOfBirth || (isSuperAdmin && !selectedTenant)}
               >
-                {saving ? 'Saving…' : 'Add Student'}
+                {saving ? t('common.saving') : t('students.add')}
               </Button>
             </div>
           </form>
@@ -380,5 +425,15 @@ export default function StudentsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function FieldError({ id, error }: { id: string; error?: StudentErrors[StudentField] }) {
+  const { t } = useTranslation();
+  if (!error) return null;
+  return (
+    <p id={id} className="text-xs text-destructive">
+      {t(`validation.${error}`)}
+    </p>
   );
 }

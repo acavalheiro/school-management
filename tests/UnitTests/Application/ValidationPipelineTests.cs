@@ -3,6 +3,7 @@ using Application.Auth.Commands;
 using Application.Common;
 using Application.Common.Interfaces;
 using Application.Common.Mediator;
+using Application.Me.Commands;
 using Application.Users.Commands;
 using AwesomeAssertions;
 using Domain.Common;
@@ -30,6 +31,10 @@ public sealed class ValidationPipelineTests
             .Setup(x => x.UpdateUserRoleAsync(
                 It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success());
+        _identityService
+            .Setup(x => x.UpdatePreferredLanguageAsync(
+                It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success());
 
         var tenantService = new Mock<ITenantService>();
         tenantService.Setup(x => x.TenantId).Returns(Guid.NewGuid());
@@ -38,6 +43,7 @@ public sealed class ValidationPipelineTests
         services.AddApplication();
         services.AddSingleton(_identityService.Object);
         services.AddSingleton(tenantService.Object);
+        services.AddSingleton(new Mock<ICurrentUserService>().Object);
         services.AddSingleton(new Mock<IAppDbContext>().Object);
 
         _provider = services.BuildServiceProvider();
@@ -108,5 +114,29 @@ public sealed class ValidationPipelineTests
         var result = await Send(command);
 
         result.IsFailure.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task Send_UpdateMyLanguageToUnsupportedLanguage_IsRejectedBeforeReachingTheHandler()
+    {
+        var result = await Send(new UpdateMyLanguageCommand("pt-BR"));
+
+        result.IsFailure.Should().BeTrue();
+        _identityService.Verify(
+            x => x.UpdatePreferredLanguageAsync(
+                It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task Send_UpdateMyLanguageToSupportedLanguage_ReachesTheHandler()
+    {
+        var result = await Send(new UpdateMyLanguageCommand(SupportedLanguages.PtPt));
+
+        result.IsSuccess.Should().BeTrue();
+        _identityService.Verify(
+            x => x.UpdatePreferredLanguageAsync(
+                It.IsAny<Guid>(), SupportedLanguages.PtPt, It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 }

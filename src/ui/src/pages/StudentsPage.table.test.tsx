@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { ApiError } from '../api/http';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import StudentsPage from './StudentsPage';
@@ -74,13 +75,14 @@ describe('StudentsPage table', () => {
     expect(screen.queryByRole('button', { name: /add student/i })).not.toBeInTheDocument();
   });
 
-  it('shows the fetch error message instead of the table', async () => {
+  it('shows a translated error instead of the table, never the raw response', async () => {
     mockRole('Admin');
-    mockedList.mockRejectedValue(new Error('Network is unreachable'));
+    mockedList.mockRejectedValue(new ApiError(503, 'upstream connect error'));
 
     renderPage();
 
-    expect(await screen.findByText('Network is unreachable')).toBeInTheDocument();
+    expect(await screen.findByText(/the server had a problem/i)).toBeInTheDocument();
+    expect(screen.queryByText(/upstream connect error/)).not.toBeInTheDocument();
   });
 
   it('shows the "Add Student" header button for Admin and SuperAdmin, hides it for User', async () => {
