@@ -10,7 +10,8 @@ Spec: `spec/SPEC-i18n.md` · Plan: `tasks/plan.md` · Branch: `feature/user-lang
 - [x] T3. `PUT /api/me/language`: command + validator + handler + `UpdatePreferredLanguageAsync` (double whitelist, no stamp change)
   - Verify: unit + integration tests (204/400, all roles, A's PUT leaves B unchanged), `ValidationPipelineTests` case
 - [x] Checkpoint A: `dotnet test` green
-- [ ] Manual: GET/PUT `/api/me` with a real JWT via Aspire (+ anonymous → 401)
+- [x] Real-JWT `/api/me` checks (anonymous → 401, `sub` resolution, forged/stale tokens): automated in `MeEndpointsRealJwtTests`
+- [ ] Manual: one GET/PUT `/api/me` against Aspire + PostgreSQL (the automated tests run on EF InMemory)
 
 ## Phase B: Frontend foundation
 - [x] T4. i18n core (`i18next`, `react-i18next`), typed catalogues, `LanguageProvider`, `LanguageSwitcher`, translated `Layout`, test setup

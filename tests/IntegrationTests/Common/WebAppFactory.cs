@@ -19,8 +19,21 @@ using Microsoft.Extensions.Options;
 
 namespace IntegrationTests.Common;
 
-public sealed class WebAppFactory : WebApplicationFactory<Program>
+/// <param name="useRealAuth">
+/// When true, keeps the production JWT bearer pipeline (signature, issuer, audience, lifetime and
+/// security-stamp checks) instead of installing <see cref="TestAuthHandler"/>. Requests then need a
+/// real token from <c>/api/auth/login</c>, and anonymous requests get 401 as in production.
+/// </param>
+public sealed class WebAppFactory(bool useRealAuth = false) : WebApplicationFactory<Program>
 {
+    /// <summary>Must match the JwtSettings environment variables set in the static constructor.</summary>
+    public const string JwtSecret = "integration-tests-signing-key-not-used-in-any-real-environment";
+    public const string JwtIssuer = "atl-api-tests";
+    public const string JwtAudience = "atl-ui-tests";
+
+    /// <summary>The password <see cref="SeedUserAsync"/> gives every seeded account.</summary>
+    public const string SeededPassword = "Seeded-Password-1";
+
     public static readonly Guid TestTenantId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
 
     // Must be computed once per factory: generating it inside the options lambda
@@ -33,10 +46,9 @@ public sealed class WebAppFactory : WebApplicationFactory<Program>
     // variable. The value is test-only and signs nothing real.
     static WebAppFactory()
     {
-        Environment.SetEnvironmentVariable(
-            "JwtSettings__Secret", "integration-tests-signing-key-not-used-in-any-real-environment");
-        Environment.SetEnvironmentVariable("JwtSettings__Issuer", "atl-api-tests");
-        Environment.SetEnvironmentVariable("JwtSettings__Audience", "atl-ui-tests");
+        Environment.SetEnvironmentVariable("JwtSettings__Secret", JwtSecret);
+        Environment.SetEnvironmentVariable("JwtSettings__Issuer", JwtIssuer);
+        Environment.SetEnvironmentVariable("JwtSettings__Audience", JwtAudience);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -69,6 +81,9 @@ public sealed class WebAppFactory : WebApplicationFactory<Program>
 
             // ITenantService is deliberately NOT replaced: tests exercise the real
             // claim-based resolution, driven per request by TestAuthHandler.
+
+            if (useRealAuth)
+                return;
 
             // Override authentication to auto-authenticate all test requests
             services.AddAuthentication(TestAuthHandler.SchemeName)
@@ -136,7 +151,7 @@ public sealed class WebAppFactory : WebApplicationFactory<Program>
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
         var user = new ApplicationUser { Id = Guid.NewGuid(), UserName = email, Email = email, TenantId = tenantId };
 
-        var created = await userManager.CreateAsync(user, "Seeded-Password-1");
+        var created = await userManager.CreateAsync(user, SeededPassword);
         if (!created.Succeeded)
             throw new InvalidOperationException(string.Join("; ", created.Errors.Select(e => e.Description)));
         await userManager.AddToRoleAsync(user, role);
