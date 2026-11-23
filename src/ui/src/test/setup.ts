@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
+import i18n from '../i18n';
 
 afterEach(() => {
   cleanup();
@@ -39,7 +40,10 @@ Object.defineProperty(globalThis, 'localStorage', {
   value: new MemoryStorage(),
 });
 
-afterEach(() => {
+// Every test starts in en-GB, so existing assertions on English copy hold. Reset the
+// language before clearing storage: changing it re-caches the choice in localStorage.
+afterEach(async () => {
+  await i18n.changeLanguage('en-GB');
   localStorage.clear();
 });
 

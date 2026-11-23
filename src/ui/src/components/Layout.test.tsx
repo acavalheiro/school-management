@@ -69,4 +69,17 @@ describe('Layout', () => {
 
     expect(screen.getByText('someone@school.test')).toBeInTheDocument();
   });
+
+  it('switches the sidebar to Portuguese without a reload', async () => {
+    const user = userEvent.setup();
+    setup('SuperAdmin');
+
+    await user.selectOptions(screen.getByRole('combobox', { name: /language/i }), 'pt-PT');
+
+    expect(screen.getByRole('link', { name: /alunos/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /escolas/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /terminar sessão/i })).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe('pt-PT');
+    expect(localStorage.getItem('atl_lang')).toBe('pt-PT');
+  });
 });

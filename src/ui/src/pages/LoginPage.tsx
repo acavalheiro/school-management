@@ -3,6 +3,8 @@ import { authApi } from '../api/authApi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+import { useTranslation } from 'react-i18next';
 import {
   Card,
   CardContent,
@@ -16,6 +18,7 @@ interface Props {
 }
 
 export default function LoginPage({ onLogin }: Props) {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -28,8 +31,8 @@ export default function LoginPage({ onLogin }: Props) {
     try {
       const result = await authApi.login(email, password);
       onLogin(result.token);
-    } catch (err) {
-      setError('Invalid email or password.');
+    } catch {
+      setError(t('auth.invalidCredentials'));
     } finally {
       setLoading(false);
     }
@@ -38,6 +41,9 @@ export default function LoginPage({ onLogin }: Props) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/40 px-4">
       <div className="w-full max-w-sm">
+        <div className="mb-6 flex justify-end">
+          <LanguageSwitcher className="w-52" />
+        </div>
         <div className="mb-8 text-center">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-primary mb-4">
             <svg
@@ -59,23 +65,23 @@ export default function LoginPage({ onLogin }: Props) {
               />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">ATL School</h1>
-          <p className="text-sm text-muted-foreground mt-1">Student Management Portal</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">{t('app.name')}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t('app.tagline')}</p>
         </div>
 
         <Card>
           <CardHeader className="pb-4">
-            <CardTitle className="text-xl">Sign in</CardTitle>
-            <CardDescription>Enter your credentials to access your account</CardDescription>
+            <CardTitle className="text-xl">{t('auth.signIn')}</CardTitle>
+            <CardDescription>{t('auth.signInDescription')}</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t('auth.email')}</Label>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="you@example.com"
+                  placeholder={t('auth.emailPlaceholder')}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   autoComplete="email"
@@ -83,7 +89,7 @@ export default function LoginPage({ onLogin }: Props) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{t('auth.password')}</Label>
                 <Input
                   id="password"
                   type="password"
@@ -100,7 +106,7 @@ export default function LoginPage({ onLogin }: Props) {
               )}
 
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? 'Signing in…' : 'Sign in'}
+                {loading ? t('auth.signingIn') : t('auth.signIn')}
               </Button>
             </form>
           </CardContent>

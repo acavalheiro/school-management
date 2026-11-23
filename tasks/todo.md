@@ -9,14 +9,15 @@ Spec: `spec/SPEC-i18n.md` · Plan: `tasks/plan.md` · Branch: `feature/user-lang
   - Verify: `dotnet test --filter "FullyQualifiedName~Me"`: default en-GB, 401 anonymous, 404 unknown user
 - [x] T3. `PUT /api/me/language`: command + validator + handler + `UpdatePreferredLanguageAsync` (double whitelist, no stamp change)
   - Verify: unit + integration tests (204/400, all roles, A's PUT leaves B unchanged), `ValidationPipelineTests` case
-- [ ] Checkpoint A: `dotnet test` green; manual GET/PUT `/api/me` with a real JWT via Aspire
+- [x] Checkpoint A: `dotnet test` green
+- [ ] Manual: GET/PUT `/api/me` with a real JWT via Aspire (+ anonymous → 401)
 
 ## Phase B: Frontend foundation
-- [ ] T4. i18n core (`i18next`, `react-i18next`), typed catalogues, `LanguageProvider`, `LanguageSwitcher`, translated `Layout`, test setup
+- [x] T4. i18n core (`i18next`, `react-i18next`), typed catalogues, `LanguageProvider`, `LanguageSwitcher`, translated `Layout`, test setup
   - Verify: `npm test && npm run build && npm run lint`; missing pt-PT key / unknown key fails build
-- [ ] T5. Login page translated + switcher; detection precedence (localStorage > browser > en-GB)
+- [x] T5. Login page translated + switcher; detection precedence (localStorage > browser > en-GB)
   - Verify: precedence tests; pt-BR browser shows pt-PT
-- [ ] T6. Server sync via `meApi` (adopt server language on login/load; PUT only when signed in; non-blocking failure)
+- [x] T6. Server sync via `meApi` (adopt server language on login/load; PUT only when signed in; non-blocking failure)
   - Verify: mocked-fetch tests for the three scenarios
 - [ ] Checkpoint B: frontend checks green; manual reload + fresh-browser sign-in applies saved language
 
