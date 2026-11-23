@@ -72,7 +72,7 @@ export const ptPT: Messages<typeof enGB> = {
       tenant: 'Escola',
       searchTenants: 'Pesquisar escolas…',
       noTenants: 'Nenhuma escola encontrada.',
-      firstName: 'Nome próprio',
+      firstName: 'Nome',
       lastName: 'Apelido',
       email: 'Email',
       dateOfBirth: 'Data de nascimento',
@@ -80,7 +80,7 @@ export const ptPT: Messages<typeof enGB> = {
     },
   },
   roles: {
-    SuperAdmin: 'Superadministrador',
+    SuperAdmin: 'Super Admin',
     Admin: 'Administrador',
     User: 'Utilizador',
   },

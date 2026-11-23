@@ -27,7 +27,8 @@ Spec: `spec/SPEC-i18n.md` · Plan: `tasks/plan.md` · Branch: `feature/user-lang
 - [x] T8. Dashboard + Students: translated, locale dates, date-fns calendar locale, create-student client validation
 - [x] T9. Tenants + TenantDetail: translated (Escola), dates, dialogs
 - [x] T10. `components/ui/*` labels + leftover-literal sweep + "no empty pt-PT value" test
-- [ ] Checkpoint C: full manual walkthrough in both languages; **pt-PT copy reviewed by repo owner**
+- [x] pt-PT copy reviewed by repo owner (Nome, Super Admin; rest accepted)
+- [ ] Manual: full walkthrough of every page in both languages (long strings, date picker)
 
 ## Phase D: Wrap-up
-- [ ] T11. Update CLAUDE.md (`/api/me`, `ICurrentUserService`, i18n conventions, stale frontend-test note, `X-Test-User`); fold outcome into spec
+- [x] T11. Update CLAUDE.md (`/api/me`, `ICurrentUserService`, i18n conventions, stale frontend-test note, `X-Test-User`); fold outcome into spec

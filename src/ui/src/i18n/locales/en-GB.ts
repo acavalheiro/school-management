@@ -77,7 +77,7 @@ export const enGB = {
     },
   },
   roles: {
-    SuperAdmin: 'Super admin',
+    SuperAdmin: 'Super Admin',
     Admin: 'Admin',
     User: 'User',
   },

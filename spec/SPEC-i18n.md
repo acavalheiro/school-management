@@ -1,6 +1,6 @@
 # Spec: User Language & Site Translations — V1
 
-Status: approved (2026-11-23). Plan: `tasks/plan.md`
+Status: implemented (2026-11-23), pending the manual checks listed in `tasks/todo.md`. Plan: `tasks/plan.md`
 
 ## Objective
 
@@ -256,6 +256,17 @@ literals, truncated layouts (Portuguese strings are ~20–30% longer), and the d
 All open questions are resolved.
 
 ## Decisions
+
+- **As built, the frontend has no `LanguageProvider` component.** A `useLanguage()` hook (`src/i18n/useLanguage.ts`) owns
+  `language`, `setLanguage` and `formatDate`; `AuthContext` fetches `GET /api/me` after sign-in and on load and applies
+  the saved language unless the user changed it while the request was in flight. `src/i18n/index.ts` keeps
+  `<html lang>` and `localStorage` in sync on every change.
+- **Shared HTTP layer.** `src/api/http.ts` (`apiRequest`, `ApiError`) replaced three copies of `request()`;
+  `src/i18n/errors.ts` maps status → message. Login keeps its generic invalid-credentials message for every
+  failure except 429, which is reported as rate limiting (it reveals nothing about the account).
+- **pt-PT review outcome (repo owner, 2026-11-23):** first name → "Nome" (not "Nome próprio"); SuperAdmin → "Super Admin"
+  (en-GB matched to "Super Admin"). All other drafted terms accepted as written: Apelido, Concluído, Função, Painel,
+  Email, Matricular, Administrador, "ATL School" kept as the brand.
 
 - **`PreferredLanguage` is a string language code, not an FK to a `Languages` table.** A language is only
   usable once its catalogue ships in the frontend bundle, so the supported set is defined by code

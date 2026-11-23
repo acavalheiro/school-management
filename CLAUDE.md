@@ -55,9 +55,10 @@ npm install
 npm run dev      # http://localhost:5173 — the only origin allowed by the API's CORS policy
 npm run build    # tsc -b && vite build
 npm run lint     # eslint
+npm test         # vitest run (jsdom + React Testing Library)
 ```
 
-There is no frontend test setup. API base URL comes from `VITE_API_URL`, defaulting to `https://localhost:7000`. `@/` aliases `src/ui/src/`.
+Frontend tests live beside the code as `*.test.ts(x)`; `src/test/setup.ts` installs an in-memory `localStorage`, jsdom shims for Radix/Base UI, and resets the language to `en-GB` after every test. API base URL comes from `VITE_API_URL`, defaulting to `https://localhost:7000`. `@/` aliases `src/ui/src/`.
 
 ## Architecture
 
@@ -142,6 +143,7 @@ Note that `Program` validates during `CreateBuilder`, before web-host configurat
 - Never call `IgnoreQueryFilters()` outside a SuperAdmin-only handler.
 - Injecting `AppDbContext` directly instead of `IAppDbContext` silently skips the tenant stamp. Always take `IAppDbContext`.
 - Identity tables are unfiltered — any new user-facing query must filter on `TenantId` explicitly and verify the target user's tenant matches the caller's.
+- Endpoints that act on the caller's own account (`/api/me/*`) take the user id from `ICurrentUserService` (the JWT `sub` claim), never from the route or body. They accept no user id at all; that is their isolation boundary.
 - Frontend `RequireRole` is cosmetic. Authorization is only real when enforced server-side.
 
 ### Handling student files (photos, invoices)
@@ -159,7 +161,7 @@ Not yet implemented. When it is:
 
 - Naming: `Create[Entity]Command`, `Get[Entity]Query` / `List[Entities]Query`, `[Command|Query]Handler`, `[Entity]Dto`, `Create[Entity]Request`.
 - Primary constructors for DI; records for DTOs/commands; file-scoped namespaces; `CancellationToken` on every async method.
-- Auth endpoints are anonymous; everything else uses `.RequireAuthorization()`. `/api/users` requires `.RequireAuthorization(AppRoles.Admin)`; `/api/tenants` requires SuperAdmin.
+- Auth endpoints are anonymous; everything else uses `.RequireAuthorization()`. `/api/users` requires `.RequireAuthorization(AppRoles.Admin)`; `/api/tenants` requires SuperAdmin. `/api/me` uses plain `.RequireAuthorization()` (any role).
 - Request DTO records are declared at the bottom of the endpoint file they belong to.
 
 ### Never suggest
@@ -168,16 +170,28 @@ Repository pattern (use `IAppDbContext`/EF Core directly), AutoMapper (mappings 
 
 ## Frontend notes
 
-- JWT is stored in `localStorage` under `atl_token` via `tokenStore` in `src/api/authApi.ts`; `AuthContext` decodes it client-side (base64 payload) to read email, role, and `tid`.
+- JWT is stored in `localStorage` under `atl_token` via `tokenStore` in `src/api/tokenStore.ts` (re-exported from `authApi.ts`); `AuthContext` decodes it client-side (base64 payload) to read email, role, and `tid`.
 - The role claim key is the full `http://schemas.microsoft.com/ws/2008/06/identity/claims/role` URI.
 - Routing lives in `App.tsx` with `RequireAuth` / `RequireRole` wrappers around a shared `Layout`.
 - `components/ui/*` are shadcn-style Radix primitives; compose with `cn()` from `lib/utils.ts`.
+- All API calls go through `apiRequest` in `src/api/http.ts`, which throws `ApiError(status, body)`. Never render `body` or `error.message`: keep the error object in state and render `errorMessage(error, t)` from `@/i18n/errors`, which maps the status to a translated message (and follows language switches).
+
+### Translations (i18next)
+
+- Languages: `en-GB` and `pt-PT`, mirrored by `SupportedLanguages` on the API and `src/i18n/languages.ts`. Specs: `spec/SPEC-i18n.md`.
+- Every user-visible string goes through `t()` from `useTranslation()`. Add keys to `src/i18n/locales/en-GB.ts` first, then `pt-PT.ts`. `pt-PT` is typed against `en-GB` and `i18next.d.ts` types every key, so a missing pt-PT key or an unknown `t()` key fails `npm run build`.
+- pt-PT copy is European Portuguese (palavra-passe, utilizador, ecrã, Terminar sessão), never Brazilian. Fixed terms: Tenant → Escola, Student → Aluno, first name → Nome, last name → Apelido. The repo owner reviews pt-PT copy before merge.
+- Plurals use `_one` / `_other` keys with `{ count }`. pt-PT treats zero as plural ("0 alunos").
+- Dates: `formatDate` from `useLanguage()`, never `toLocaleDateString()` without a locale. Date-only API values (`YYYY-MM-DD`) go through `parseISODate` first to avoid a timezone shift. `Calendar` picks up the matching `react-day-picker` locale itself.
+- Language precedence: the account's saved preference (fetched from `GET /api/me` by `AuthContext` after sign-in or on load) > `localStorage` `atl_lang` > browser language > `en-GB`. `useLanguage().setLanguage` applies immediately and PUTs to `/api/me/language` only when signed in.
+- API values (roles, student statuses) stay in English on the wire; translate only their labels (`roles.*`, `students.status.*`) and show unknown values as-is. User-generated content (names, school names) is never translated.
 
 ## Testing
 
 - Unit tests cover Domain entities and Application handlers, using Moq and `tests/UnitTests/Common/MockDbSet.cs` to fake `DbSet`s.
 - Integration tests use `WebAppFactory` (`WebApplicationFactory<Program>`), which swaps PostgreSQL for EF Core InMemory and installs `TestAuthHandler` so every request is auto-authenticated. Note it removes `IDbContextOptionsConfiguration<AppDbContext>` registrations too — EF Core 10 accumulates them per `AddDbContext` call and both providers would otherwise apply. The in-memory database name is a factory field, not generated inside the options lambda; generating it there gives each scope its own database and silently hides seeded data.
-- `ITenantService` is **not** stubbed to a fixed value. `ClaimsTestTenantService` reads the `tid` claim exactly as production does, and `TestAuthHandler` takes the tenant and role from the `X-Test-Tenant` / `X-Test-Role` headers (defaulting to `TestTenantId` / `Admin`). Use `factory.CreateClientFor(tenantId, role)` to act as a given tenant and `factory.SeedAsync(...)` to arrange data for other tenants with the filter bypassed.
+- `ITenantService` is **not** stubbed to a fixed value. The real `TenantService` reads the `tid` claim exactly as in production, and `TestAuthHandler` takes the tenant and role from the `X-Test-Tenant` / `X-Test-Role` headers (defaulting to `TestTenantId` / `Admin`). Use `factory.CreateClientFor(tenantId, role)` to act as a given tenant and `factory.SeedAsync(...)` to arrange data for other tenants with the filter bypassed.
+- `TestAuthHandler` also emits a `sub` claim from `X-Test-User` (a fresh random id when absent, so `/api/me` returns 404 rather than someone else's data). To act as a real account, create it with `factory.SeedUserAsync(email, tenantId, role)` and call the API through `factory.CreateClientForUser(userId, tenantId, role)`; `factory.FindUserAsync(id)` reads stored Identity state for assertions. `MeEndpointsTests` covers the "a user can only change their own account" invariant.
 - `TenantIsolationTests` covers the cross-tenant read invariant. When changing the query filter or tenant resolution, confirm those tests **fail** if you deliberately break isolation — an isolation test that passes vacuously on an empty result set is worse than none.
 - `Program.cs` ends with `public partial class Program;` so the factory can reference it.
 - Some behavior is only reachable through the real JWT pipeline, which `TestAuthHandler` bypasses: security-stamp revocation, rate limiting, Identity lockout, and the registration transaction (EF InMemory has no transactions). These were verified manually against a running Aspire instance on 2026-07-22 — lockout after 5 attempts with an error identical to wrong-password, 429 after 10 auth requests/min, tokens rejected after a role change or delete, and a duplicate-email registration rolling back with no orphaned `Tenant` row. Automated coverage still does not exist; re-verify manually after touching any of them.
