@@ -101,6 +101,7 @@ app.MapAuthEndpoints();
 app.MapStudentEndpoints();
 app.MapUserManagementEndpoints();
 app.MapTenantEndpoints();
+app.MapMeEndpoints();
 
 // --- Startup tasks ---
 if (app.Environment.IsDevelopment())

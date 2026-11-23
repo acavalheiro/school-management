@@ -1,6 +1,7 @@
 using Application.Auth.Queries;
 using Application.Common;
 using Application.Common.Interfaces;
+using Application.Me.Queries;
 using Application.Users.Queries;
 using Domain.Common;
 using Microsoft.AspNetCore.Identity;
@@ -199,6 +200,47 @@ internal sealed class IdentityService(
         {
             var description = string.Join("; ", deleteResult.Errors.Select(e => e.Description));
             return new Error("Identity.Delete", description);
+        }
+
+        return Result.Success();
+    }
+
+    public async Task<Result<CurrentUserDto>> GetCurrentUserAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var user = userId == Guid.Empty ? null : await userManager.FindByIdAsync(userId.ToString());
+        if (user is null)
+            return Error.NotFound(nameof(ApplicationUser), userId);
+
+        var roles = await userManager.GetRolesAsync(user);
+        return new CurrentUserDto(
+            user.Id, user.Email!, roles.FirstOrDefault() ?? AppRoles.User, user.PreferredLanguage);
+    }
+
+    public async Task<Result> UpdatePreferredLanguageAsync(
+        Guid userId,
+        string language,
+        CancellationToken cancellationToken)
+    {
+        // Defence in depth: never persist an unsupported code, regardless of what
+        // validation ran upstream.
+        if (!SupportedLanguages.IsSupported(language))
+            return Error.Validation(nameof(language), "Language is not supported.");
+
+        var user = userId == Guid.Empty ? null : await userManager.FindByIdAsync(userId.ToString());
+        if (user is null)
+            return Error.NotFound(nameof(ApplicationUser), userId);
+
+        if (user.PreferredLanguage == language)
+            return Result.Success();
+
+        // UpdateAsync, not a security-stamp rotation: a language change is not
+        // security-relevant and must not sign the user out.
+        user.PreferredLanguage = language;
+        var updateResult = await userManager.UpdateAsync(user);
+        if (!updateResult.Succeeded)
+        {
+            var description = string.Join("; ", updateResult.Errors.Select(e => e.Description));
+            return new Error("Identity.UpdateLanguage", description);
         }
 
         return Result.Success();

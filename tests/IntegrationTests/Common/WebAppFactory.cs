@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Application.Common;
 using Application.Common.Interfaces;
+using Infrastructure.Identity;
 using Infrastructure.Persistence;
 using Domain.Entities;
 using Microsoft.AspNetCore.Authentication;
@@ -86,6 +87,17 @@ public sealed class WebAppFactory : WebApplicationFactory<Program>
         CreateClientWithTenantHeader(tenantId.ToString(), role);
 
     /// <summary>
+    /// Creates a client authenticated as a specific user: its token's <c>sub</c> is
+    /// <paramref name="userId"/>. Needed for <c>/api/me</c>, which acts on the caller's own account.
+    /// </summary>
+    public HttpClient CreateClientForUser(Guid userId, Guid tenantId, string role = AppRoles.Admin)
+    {
+        var client = CreateClientWithTenantHeader(tenantId.ToString(), role);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.UserHeader, userId.ToString());
+        return client;
+    }
+
+    /// <summary>
     /// Creates an authenticated client whose token carries no `tid` claim — the
     /// malformed-token case that must fail closed.
     /// </summary>
@@ -113,6 +125,35 @@ public sealed class WebAppFactory : WebApplicationFactory<Program>
     }
 
     /// <summary>
+    /// Creates a real Identity user (with its role) in <paramref name="tenantId"/> and returns its id.
+    /// Pair with <see cref="CreateClientForUser"/> to call the API as that user.
+    /// </summary>
+    public async Task<Guid> SeedUserAsync(string email, Guid tenantId, string role = AppRoles.Admin)
+    {
+        await SeedRolesAsync(role);
+
+        using var scope = Services.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = new ApplicationUser { Id = Guid.NewGuid(), UserName = email, Email = email, TenantId = tenantId };
+
+        var created = await userManager.CreateAsync(user, "Seeded-Password-1");
+        if (!created.Succeeded)
+            throw new InvalidOperationException(string.Join("; ", created.Errors.Select(e => e.Description)));
+        await userManager.AddToRoleAsync(user, role);
+
+        return user.Id;
+    }
+
+    /// <summary>Reads a user straight from Identity, bypassing the API, so tests can assert on stored state.</summary>
+    public async Task<ApplicationUser> FindUserAsync(Guid userId)
+    {
+        using var scope = Services.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        return await userManager.FindByIdAsync(userId.ToString())
+            ?? throw new InvalidOperationException($"User {userId} not found.");
+    }
+
+    /// <summary>
     /// Seeds Identity roles. RoleSeeder only runs in Development, so the Testing
     /// environment has none — yet AddToRoleAsync (used when provisioning users) needs
     /// the target role to exist. Call this before exercising user-creation endpoints.
@@ -136,6 +177,7 @@ internal sealed class TestAuthHandler(
     public const string SchemeName = "Test";
     public const string TenantHeader = "X-Test-Tenant";
     public const string RoleHeader = "X-Test-Role";
+    public const string UserHeader = "X-Test-User";
     public const string NoTenant = "none";
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
@@ -144,9 +186,16 @@ internal sealed class TestAuthHandler(
             ? roleHeader.ToString()
             : AppRoles.Admin;
 
+        // `sub` mirrors the real JWT (MapInboundClaims is off). Without X-Test-User each
+        // request is a fresh, unknown user, so /api/me returns 404 rather than someone's data.
+        var userId = Request.Headers.TryGetValue(UserHeader, out var userHeader)
+            ? userHeader.ToString()
+            : Guid.NewGuid().ToString();
+
         var claims = new List<Claim>
         {
-            new(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+            new(ClaimTypes.NameIdentifier, userId),
+            new("sub", userId),
             new(ClaimTypes.Email, "test@example.com"),
             new(ClaimTypes.Role, role)
         };
