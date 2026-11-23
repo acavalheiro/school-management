@@ -6,7 +6,9 @@ export interface StudentDto {
   lastName: string;
   email: string;
   dateOfBirth: string;
-  status: string;
+  // Domain.Enums.StudentStatus, serialised by the API as its numeric value
+  // (1 Active, 2 Inactive, 3 Graduated, 4 Suspended). Strings are tolerated in case that changes.
+  status: number | string;
   createdAt: string;
   updatedAt?: string;
 }

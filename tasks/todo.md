@@ -11,7 +11,7 @@ Spec: `spec/SPEC-i18n.md` · Plan: `tasks/plan.md` · Branch: `feature/user-lang
   - Verify: unit + integration tests (204/400, all roles, A's PUT leaves B unchanged), `ValidationPipelineTests` case
 - [x] Checkpoint A: `dotnet test` green
 - [x] Real-JWT `/api/me` checks (anonymous → 401, `sub` resolution, forged/stale tokens): automated in `MeEndpointsRealJwtTests`
-- [ ] Manual: one GET/PUT `/api/me` against Aspire + PostgreSQL (the automated tests run on EF InMemory)
+- [x] Manual (2026-11-23, Aspire + PostgreSQL): GET/PUT `/api/me` with a real token, anonymous → 401, `pt-BR` → 400, token valid after change
 
 ## Phase B: Frontend foundation
 - [x] T4. i18n core (`i18next`, `react-i18next`), typed catalogues, `LanguageProvider`, `LanguageSwitcher`, translated `Layout`, test setup
@@ -21,7 +21,7 @@ Spec: `spec/SPEC-i18n.md` · Plan: `tasks/plan.md` · Branch: `feature/user-lang
 - [x] T6. Server sync via `meApi` (adopt server language on login/load; PUT only when signed in; non-blocking failure)
   - Verify: mocked-fetch tests for the three scenarios
 - [x] Checkpoint B: frontend checks green
-- [ ] Manual: reload + fresh-browser sign-in applies saved language
+- [x] Manual (2026-11-23, Chrome DevTools): reload keeps language; fresh browser profile sign-in applies the saved language; account preference beats local choice
 
 ## Phase C: Translate the app
 - [x] T7. `ApiError` + `errorMessage(err, t)` status mapping; replace raw `e.message` displays
@@ -29,7 +29,10 @@ Spec: `spec/SPEC-i18n.md` · Plan: `tasks/plan.md` · Branch: `feature/user-lang
 - [x] T9. Tenants + TenantDetail: translated (Escola), dates, dialogs
 - [x] T10. `components/ui/*` labels + leftover-literal sweep + "no empty pt-PT value" test
 - [x] pt-PT copy reviewed by repo owner (Nome, Super Admin; rest accepted)
-- [ ] Manual: full walkthrough of every page in both languages (long strings, date picker)
+- [x] Manual (2026-11-23): login, dashboard, students (form checks, date picker, offline error) in both languages. Found and fixed: numeric status crash, Sunday-first pt-PT weeks, today selectable as DOB
+- [ ] Manual: Tenants / TenantDetail pages in the browser (need a SuperAdmin session)
+- [ ] Decide: sidebar language picker truncates "Português (Portugal)"
+- [ ] Decide: serialise API enums as names (JsonStringEnumConverter)?
 
 ## Phase D: Wrap-up
 - [x] T11. Update CLAUDE.md (`/api/me`, `ICurrentUserService`, i18n conventions, stale frontend-test note, `X-Test-User`); fold outcome into spec

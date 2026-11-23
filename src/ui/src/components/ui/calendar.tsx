@@ -32,6 +32,9 @@ function Calendar({
         className,
       )}
       locale={DAY_PICKER_LOCALES[language]}
+      // Both supported languages start the week on Monday (ISO 8601). Set it explicitly:
+      // the `pt` locale inherited from date-fns defaults to Sunday.
+      weekStartsOn={1}
       captionLayout={captionLayout}
       formatters={{
         formatMonthDropdown: (date) => date.toLocaleString(language, { month: 'short' }),

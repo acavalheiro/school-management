@@ -156,6 +156,23 @@ describe('StudentsPage create-student validation', () => {
     expect(within(dialog).getAllByText('This field is required.')).toHaveLength(2);
   });
 
+  it('does not offer today as a date of birth, since it must be strictly in the past', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const dialog = await openDialog(user, /add student/i);
+
+    await user.click(within(dialog).getByRole('button', { name: /date of birth/i }));
+    const dayButton = (d: Date) =>
+      waitFor(() => {
+        const el = document.querySelector<HTMLButtonElement>(`[data-day="${d.toLocaleDateString()}"]`);
+        expect(el).not.toBeNull();
+        return el!;
+      });
+
+    expect(await dayButton(FIXED_NOW)).toBeDisabled();
+    expect(await dayButton(new Date(2024, 6, 19))).not.toBeDisabled();
+  });
+
   it('shows a translated error and keeps the dialog open when the API rejects', async () => {
     const user = userEvent.setup();
     mockedCreate.mockRejectedValue(new ApiError(400, 'DateOfBirth: Date of birth must be in the past.'));

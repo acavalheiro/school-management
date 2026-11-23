@@ -83,6 +83,11 @@ export function parseISODate(s: string): Date | undefined {
   return s ? new Date(`${s}T00:00:00`) : undefined;
 }
 
+function yesterday(): Date {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+}
+
 export default function StudentsPage() {
   const { t } = useTranslation();
   const { formatDate } = useLanguage();
@@ -389,7 +394,8 @@ export default function StudentsPage() {
                     captionLayout="dropdown"
                     startMonth={new Date(1950, 0)}
                     endMonth={new Date()}
-                    disabled={{ after: new Date() }}
+                    // Strictly before today, matching the client and server validators.
+                    disabled={{ after: yesterday() }}
                     defaultMonth={parseISODate(form.dateOfBirth) ?? new Date()}
                     autoFocus
                   />
